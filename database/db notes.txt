@@ -1,0 +1,131 @@
+use below schema to write query in sqlite and find
+1. daily average users before and after the feature change 
+2. daily number of status changes by card 
+
+CREATE TABLE user (
+    id INTEGER PRIMARY KEY,
+    firstname TEXT,
+    lastname TEXT
+);
+CREATE TABLE login_history (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    login_timestamp INTEGER
+);
+CREATE TABLE card (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    status TEXT,
+    priority INTEGER
+);
+CREATE TABLE card_change_history (
+    id INTEGER PRIMARY_KEY,
+    cardID INTEGER,
+    oldStatus TEXT NULLABLE,
+    newStatus TEXT,
+    oldPriority INTEGER,
+    newPriority INTEGER,
+    timestamp INTEGER
+);
+
+
+SELECT datetime(login_timestamp, 'unixepoch') FROM login_history limit 25;
+
+SELECT datetime(timestamp, 'unixepoch') 
+FROM card_change_history
+ORDER BY timestamp ASC
+LIMIT 25;
+
+o/p : card_change feature introduced on date : 2018-06-02 03:54:30
+
+SELECT datetime(login_timestamp, 'unixepoch') 
+FROM login_history
+ORDER BY timestamp ASC
+LIMIT 25;
+
+o/p : login date started from date : 2018-02-03 14:19:48
+
+Daily Average Users Before and After Feature Change :
+
+WITH user_logins AS (
+    SELECT
+        DATE(login_timestamp, 'unixepoch') AS login_date,
+        COUNT(DISTINCT user_id) AS daily_users
+    FROM login_history
+    GROUP BY login_date
+)
+SELECT
+    CASE
+        WHEN login_date < '2018-06-02' THEN 'Before feature change daily avg users :'
+        ELSE 'After feature change daily avg users:'
+    END AS period,
+    ROUND(AVG(daily_users), 2) AS avg_daily_users
+FROM user_logins
+GROUP BY period;
+
+Daily number of card status changes :
+
+WITH card_changes AS (
+    SELECT
+        DATE(timestamp, 'unixepoch') AS change_date,
+        COUNT(*) AS status_changes
+    FROM card_change_history
+    GROUP BY change_date
+)
+SELECT
+    'Daily number of card status changes: ' || COUNT(DISTINCT(status_changes))
+FROM card_changes
+ORDER BY change_date;
+
+
+created sql for reference in sql server :
+sqlite> .open shiptivity.db
+sqlite> .output shiptivity.sql
+sqlite> .schema
+sqlite> select * from user,login_history,card,card_change_history
+   ...> .dump 
+
+
+sqlite> .open shiptivity.db
+sqlite> .output shiptivity.sql
+sqlite> select * from user,login_history,card,card_change_history
+   
+
+
+sql server db :
+-- Create user table
+CREATE TABLE [user] (
+    id INT PRIMARY KEY IDENTITY(1,1),  -- Auto-incrementing primary key
+    firstname VARCHAR(255),
+    lastname VARCHAR(255)
+);
+
+-- Create login_history table
+CREATE TABLE login_history (
+    id INT PRIMARY KEY IDENTITY(1,1),  -- Auto-incrementing primary key
+    user_id INT,
+    login_timestamp INT -- You could consider using DATETIME or DATETIME2 for better timestamp storage
+);
+
+-- Create card table
+CREATE TABLE card (
+    id INT PRIMARY KEY IDENTITY(1,1),  -- Auto-incrementing primary key
+    name VARCHAR(255),
+    status VARCHAR(255),
+    priority INT
+);
+
+-- Create card_change_history table
+CREATE TABLE card_change_history (
+    id INT PRIMARY KEY IDENTITY(1,1),  -- Auto-incrementing primary key
+    cardID INT,
+    oldStatus VARCHAR(255) NULL,        -- Nullable field
+    newStatus VARCHAR(255),
+    oldPriority INT,
+    newPriority INT,
+    timestamp INT  -- You could consider using DATETIME or DATETIME2 for better timestamp storage
+);
+
+
+
+
