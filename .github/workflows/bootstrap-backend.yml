@@ -32,10 +32,6 @@ jobs:
         with:
           terraform_version: 1.5.6
 
-      - name: Terraform Validate
-        working-directory: bootstrap
-        run: terraform validate
-
       - name: Terraform Init
         working-directory: bootstrap
         run: terraform init
