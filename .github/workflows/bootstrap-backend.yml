@@ -32,9 +32,9 @@ jobs:
         run: terraform init
 
       - name: Terraform Plan
-        working-directory: terraform
+        working-directory: bootstrap
         run: terraform plan
 
       - name: Terraform Apply
-        working-directory: terraform
+        working-directory: bootstrap
         run: terraform apply -auto-approve
