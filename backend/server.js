@@ -12,7 +12,7 @@ const port = 3001;
 app.use(cors());
 app.use(express.json());
 
-// SQL Server config
+// SQL Server configuration
 const sqlConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -24,14 +24,18 @@ const sqlConfig = {
   },
 };
 
+// MSSQL connection pool
 const pool = new mssql.ConnectionPool(sqlConfig);
 const poolConnect = pool.connect();
 
 poolConnect
   .then(() => console.log('✅ Connected to SQL Server'))
-  .catch(err => console.error('❌ SQL Server connection failed:', err));
+  .catch((err) => console.error('❌ SQL Server connection failed:', err));
 
-// Get all cards
+/**
+ * GET /api/cards
+ * Fetch all cards
+ */
 app.get('/api/cards', async (req, res) => {
   try {
     await poolConnect;
@@ -43,20 +47,29 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-// Update card status and priority
+/**
+ * PUT /api/v1/cards/:cardId
+ * Update a card's status and priority
+ */
 app.put('/api/v1/cards/:cardId', async (req, res) => {
   const { cardId } = req.params;
-  const { newStatus, newPriority, oldStatus, oldPriority } = req.body;
+  const { newStatus, newPriority, oldStatus, oldPriority, userId } = req.body;
 
-  if (!newStatus || newPriority === undefined || !oldStatus || oldPriority === undefined) {
+  if (
+    !newStatus ||
+    newPriority === undefined ||
+    !oldStatus ||
+    oldPriority === undefined ||
+    !userId
+  ) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
     await poolConnect;
-    const request = pool.request();
 
-    await request
+    // Update the card
+    await pool.request()
       .input('cardId', mssql.Int, cardId)
       .input('newStatus', mssql.NVarChar, newStatus)
       .input('newPriority', mssql.Int, newPriority)
@@ -66,18 +79,21 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
         WHERE id = @cardId
       `);
 
+    // Log the change
+    const description = `Status: ${oldStatus} → ${newStatus}, Priority: ${oldPriority} → ${newPriority}`;
+    const timestamp = Math.floor(Date.now() / 1000);
+
     await pool.request()
-      .input('cardId', mssql.Int, cardId)
-      .input('oldStatus', mssql.NVarChar, oldStatus)
-      .input('newStatusHistory', mssql.NVarChar, newStatus)
-      .input('oldPriority', mssql.Int, oldPriority)
-      .input('newPriority', mssql.Int, newPriority)
-      .input('timestamp', mssql.BigInt, Math.floor(Date.now() / 1000))
+      .input('cardID', mssql.Int, cardId)
+      .input('description', mssql.NVarChar, description)
+      .input('changedBy', mssql.Int, userId)
+      .input('timestamp', mssql.BigInt, timestamp)
       .query(`
-        INSERT INTO card_change_history (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
-        VALUES (@cardId, @oldStatus, @newStatusHistory, @oldPriority, @newPriority, @timestamp)
+        INSERT INTO card_change_history (cardID, description, changedBy, timestamp)
+        VALUES (@cardID, @description, @changedBy, @timestamp)
       `);
 
+    // Return updated cards
     const result = await pool.request().query('SELECT * FROM card');
     res.status(200).json(result.recordset);
 
@@ -87,7 +103,43 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
   }
 });
 
-// Verify PIN only (no user ID required)
+/**
+ * POST /api/card-change
+ * Log a manual card change event (called from handleCardChange)
+ */
+app.post('/api/card-change', async (req, res) => {
+  const { card_id, change_description, changed_by } = req.body;
+
+  if (!card_id || !change_description || !changed_by) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    await poolConnect;
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    await pool.request()
+      .input('cardID', mssql.Int, card_id)
+      .input('description', mssql.NVarChar, change_description)
+      .input('changedBy', mssql.Int, changed_by)
+      .input('timestamp', mssql.BigInt, timestamp)
+      .query(`
+        INSERT INTO card_change_history (cardID, description, changedBy, timestamp)
+        VALUES (@cardID, @description, @changedBy, @timestamp)
+      `);
+
+    res.status(200).json({ message: 'Card change logged successfully' });
+
+  } catch (err) {
+    console.error('Error logging card change:', err);
+    res.status(500).json({ error: 'Failed to log card change' });
+  }
+});
+
+/**
+ * POST /api/verify-pin
+ * Authenticate a user by their 4-digit PIN
+ */
 app.post('/api/verify-pin', async (req, res) => {
   const { pin } = req.body;
 
@@ -97,6 +149,7 @@ app.post('/api/verify-pin', async (req, res) => {
 
   try {
     await poolConnect;
+
     const result = await pool.request()
       .input('pin', mssql.VarChar, String(pin).trim())
       .query('SELECT id FROM users WHERE pin = @pin');
@@ -116,8 +169,9 @@ app.post('/api/verify-pin', async (req, res) => {
   }
 });
 
+/**
+ * Start the server
+ */
 app.listen(port, () => {
-  console.log(`🚀 Server running on http://localhost:${port}`);
+  console.log(`🚀 Server running at http://localhost:${port}`);
 });
-
-
