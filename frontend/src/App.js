@@ -1,10 +1,12 @@
-// App.js
+// src/App.js
 import React, { Component } from 'react';
 import 'bootstrap/dist/css/bootstrap.css';
 import HomeTab from './HomeTab';
 import Navigation from './Navigation';
 import Board from './Board';
 import './App.css';
+
+const API = process.env.REACT_APP_API_BASE_URL;
 
 class App extends Component {
   constructor(props) {
@@ -40,8 +42,9 @@ class App extends Component {
 
   handleUnlock = async (pin, userId) => {
     try {
-      const cardsRes = await fetch('/api/cards');
-      const cards = await cardsRes.json();
+      const response = await fetch(`${API}/api/cards`);
+      if (!response.ok) throw new Error('Failed to fetch cards');
+      const cards = await response.json();
 
       const groupedCards = {
         backlog: cards.filter((c) => c.status === 'backlog'),
@@ -63,7 +66,7 @@ class App extends Component {
 
   handleCardChange = async (cardID, oldStatus, newStatus, oldPriority, newPriority) => {
     try {
-      await fetch('/api/card-change', {
+      await fetch(`${API}/api/card-change`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +76,7 @@ class App extends Component {
         }),
       });
     } catch (error) {
-      console.error('Failed to update card:', error);
+      console.error('Failed to log card change:', error);
     }
   };
 
@@ -119,6 +122,3 @@ class App extends Component {
 }
 
 export default App;
-
-
-
