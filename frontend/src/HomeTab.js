@@ -1,14 +1,12 @@
-// HomeTab.js
+// src/HomeTab.js
 import React, { useState } from 'react';
+
+const API = process.env.REACT_APP_API_BASE_URL;
 
 export default function HomeTab({ onUnlock }) {
   const [pin, setPin] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const handlePinChange = (e) => {
-    setPin(e.target.value);
-  };
 
   const handleUnlockClick = async () => {
     if (pin.length !== 4 || isNaN(pin)) {
@@ -20,7 +18,7 @@ export default function HomeTab({ onUnlock }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/verify-pin', {
+      const response = await fetch(`${API}/api/verify-pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
@@ -33,8 +31,8 @@ export default function HomeTab({ onUnlock }) {
       } else {
         setErrorMessage(data.error || 'Invalid PIN.');
       }
-    } catch (error) {
-      console.error('Error verifying PIN:', error);
+    } catch (err) {
+      console.error('Error verifying PIN:', err);
       setErrorMessage('An error occurred while verifying the PIN.');
     } finally {
       setIsLoading(false);
@@ -53,9 +51,9 @@ export default function HomeTab({ onUnlock }) {
       <div className="pin-input-container" style={{ marginTop: '20px' }}>
         <h3>Enter your 4-digit PIN to unlock Shipping Requests Tab</h3>
         <input
-          type="password" // Use "password" to hide input characters
+          type="password"
           value={pin}
-          onChange={handlePinChange}
+          onChange={(e) => setPin(e.target.value)}
           maxLength="4"
           placeholder="PIN"
           style={{
@@ -73,10 +71,7 @@ export default function HomeTab({ onUnlock }) {
           {isLoading ? 'Verifying...' : 'Unlock'}
         </button>
         {errorMessage && (
-          <div
-            className="error-message"
-            style={{ color: 'red', marginTop: '10px' }}
-          >
+          <div style={{ color: 'red', marginTop: '10px' }}>
             {errorMessage}
           </div>
         )}
@@ -84,5 +79,3 @@ export default function HomeTab({ onUnlock }) {
     </header>
   );
 }
-
-
