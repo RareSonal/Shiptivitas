@@ -26,3 +26,21 @@ variable "db_password_ssm_path" {
   type        = string
   default     = "/stockwishlist/db_password"
 }
+
+variable "vpc_id" {
+  description = "VPC ID to launch the EC2 instance in"
+  type        = string
+  default     = "vpc-0b6987d09fe5c1577"
+}
+
+variable "public_subnet_id" {
+  description = "Subnet ID to launch the EC2 instance in"
+  type        = string
+  default     = "subnet-0d851f3b40055b56d" 
+}
+
+variable "security_group_id" {
+  description = "Security Group ID to associate with the EC2 instance"
+  type        = string
+  default     = "sg-0965338ad1360b60a" 
+}
