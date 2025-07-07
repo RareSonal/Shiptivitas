@@ -1,6 +1,6 @@
 #!/bin/bash
 yum update -y
-curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+curl -sL https://rpm.nodesource.com/setup_18.18.2 | bash -
 yum install -y nodejs git postgresql
 
 # Clone the project
