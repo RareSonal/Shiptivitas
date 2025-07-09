@@ -56,8 +56,8 @@ resource "aws_instance" "shiptivitas_api" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = "t2.micro"
   key_name                    = var.key_name
-  subnet_id                   = var.public_subnet_id
-  vpc_security_group_ids      = [var.security_group_id]
+  subnet_id                   = trimspace(var.public_subnet_id)
+  vpc_security_group_ids      = [trimspace(var.security_group_id)]
   iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_profile.name
   associate_public_ip_address = true
   user_data                   = data.template_file.user_data.rendered
