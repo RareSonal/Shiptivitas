@@ -1,4 +1,7 @@
+
+
 resource "aws_cloudfront_origin_access_control" "oac" {
+  count                             = var.create_s3_bucket ? 1 : 0
   name                              = "shiptivitas-oac"
   description                       = "OAC for secure access to S3"
   origin_access_control_origin_type = "s3"
@@ -11,10 +14,10 @@ resource "aws_cloudfront_distribution" "cdn" {
   default_root_object = "index.html"
 
   origin {
-    domain_name = aws_s3_bucket.shiptivitas_frontend.bucket_regional_domain_name
+    domain_name = var.create_s3_bucket ? aws_s3_bucket.shiptivitas_frontend[0].bucket_regional_domain_name : "shiptivitas-frontend-bucket.s3.amazonaws.com"
     origin_id   = "S3Origin"
 
-    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+    origin_access_control_id = var.create_s3_bucket ? aws_cloudfront_origin_access_control.oac[0].id : var.existing_oac_id
   }
 
   default_cache_behavior {
