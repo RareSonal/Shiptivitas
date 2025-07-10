@@ -67,8 +67,3 @@ variable "create_cdn" {
   type    = bool
   default = true
 }
-
-variable "create_ec2_ssm_role" {
-  type    = bool
-  default = true
-}
