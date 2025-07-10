@@ -37,3 +37,38 @@ variable "security_group_id" {
   description = "Security Group ID to associate with the EC2 instance"
   type        = string
 }
+
+variable "create_s3_bucket" {
+  type    = bool
+  default = true
+}
+
+variable "create_iam_role" {
+  type    = bool
+  default = true
+}
+
+variable "create_iam_profile" {
+  type    = bool
+  default = true
+}
+
+variable "create_oac" {
+  type    = bool
+  default = true
+}
+
+variable "existing_oac_id" {
+  type    = string
+  default = ""
+}
+
+variable "create_cdn" {
+  type    = bool
+  default = true
+}
+
+variable "create_ec2_ssm_role" {
+  type    = bool
+  default = true
+}
