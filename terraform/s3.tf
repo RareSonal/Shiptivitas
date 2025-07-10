@@ -1,10 +1,14 @@
+
+
 resource "aws_s3_bucket" "shiptivitas_frontend" {
-  bucket        = "shiptivitas-frontend-bucket" # must be globally unique
+  count         = var.create_s3_bucket ? 1 : 0
+  bucket        = "shiptivitas-frontend-bucket" 
   force_destroy = true
 }
 
 resource "aws_s3_bucket_ownership_controls" "ownership" {
-  bucket = aws_s3_bucket.shiptivitas_frontend.id
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.shiptivitas_frontend[0].id
 
   rule {
     object_ownership = "BucketOwnerPreferred"
@@ -12,7 +16,8 @@ resource "aws_s3_bucket_ownership_controls" "ownership" {
 }
 
 resource "aws_s3_bucket_public_access_block" "public_access_block" {
-  bucket = aws_s3_bucket.shiptivitas_frontend.id
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.shiptivitas_frontend[0].id
 
   block_public_acls       = true
   ignore_public_acls      = true
@@ -21,7 +26,8 @@ resource "aws_s3_bucket_public_access_block" "public_access_block" {
 }
 
 resource "aws_s3_bucket_cors_configuration" "cors" {
-  bucket = aws_s3_bucket.shiptivitas_frontend.id
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.shiptivitas_frontend[0].id
 
   cors_rule {
     allowed_headers = ["*"]
@@ -32,7 +38,8 @@ resource "aws_s3_bucket_cors_configuration" "cors" {
 }
 
 resource "aws_s3_bucket_policy" "frontend_policy" {
-  bucket = aws_s3_bucket.shiptivitas_frontend.id
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.shiptivitas_frontend[0].id
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -44,7 +51,7 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
           Service = "cloudfront.amazonaws.com"
         },
         Action    = "s3:GetObject",
-        Resource  = "${aws_s3_bucket.shiptivitas_frontend.arn}/*",
+        Resource  = "${aws_s3_bucket.shiptivitas_frontend[0].arn}/*",
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = aws_cloudfront_distribution.cdn.arn
