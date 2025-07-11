@@ -1,10 +1,10 @@
 data "aws_ami" "amazon_linux" {
   owners      = ["amazon"]
-  most_recent = true
+  most_recent = false # changed to prevent drifting on AMI updates
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    values = ["amzn2-ami-hvm-2.0.????????*-x86_64-gp2"]
   }
 }
 
@@ -54,7 +54,6 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   role  = var.create_iam_role ? aws_iam_role.ec2_ssm_role[0].name : "shiptivitas-ec2-ssm-role"
 }
 
-# EC2 Instance
 resource "aws_instance" "shiptivitas_api" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = "t2.micro"
@@ -64,6 +63,14 @@ resource "aws_instance" "shiptivitas_api" {
   iam_instance_profile        = var.create_iam_profile ? aws_iam_instance_profile.ec2_ssm_profile[0].name : "shiptivitas-ec2-ssm-profile"
   associate_public_ip_address = true
   user_data                   = data.template_file.user_data.rendered
+
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes = [
+      ami, # Prevent unnecessary recreation when AMI updates
+      user_data
+    ]
+  }
 
   tags = {
     Name = "Shiptivitas-API"
