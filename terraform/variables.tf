@@ -85,3 +85,9 @@ variable "cloudfront_oac_id" {
   type        = string
   default     = ""
 }
+
+variable "create_ec2" {
+  description = "Whether to create the EC2 instance"
+  type        = bool
+  default     = true
+}
