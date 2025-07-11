@@ -22,15 +22,16 @@ locals {
   s3_domain_name = var.create_s3_bucket ? aws_s3_bucket.shiptivitas_frontend[0].bucket_regional_domain_name : "shiptivitas-frontend-bucket.s3.amazonaws.com"
 }
 
+# Only create CloudFront distribution if not using existing one
 resource "aws_cloudfront_distribution" "cdn" {
   count               = var.use_existing_cdn ? 0 : 1
   enabled             = true
   default_root_object = "index.html"
+  comment             = "shiptivitas-cdn"
 
   origin {
-    domain_name = local.s3_domain_name
-    origin_id   = "S3Origin"   # Required and must be a simple string
-
+    domain_name              = local.s3_domain_name
+    origin_id                = "S3Origin"
     origin_access_control_id = local.origin_access_control_id
   }
 
