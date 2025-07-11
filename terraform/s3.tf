@@ -1,8 +1,6 @@
-
-
 resource "aws_s3_bucket" "shiptivitas_frontend" {
   count         = var.create_s3_bucket ? 1 : 0
-  bucket        = "shiptivitas-frontend-bucket" 
+  bucket        = "shiptivitas-frontend-bucket"
   force_destroy = true
 }
 
@@ -54,7 +52,7 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
         Resource  = "${aws_s3_bucket.shiptivitas_frontend[0].arn}/*",
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.cdn.arn
+            "AWS:SourceArn" = var.use_existing_cdn ? data.aws_cloudfront_distribution.existing[0].arn : aws_cloudfront_distribution.cdn[0].arn
           }
         }
       }
