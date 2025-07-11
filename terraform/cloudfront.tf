@@ -10,11 +10,9 @@ data "aws_iam_openid_connect_provider" "github" {
   arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
 }
 
-# Manage the GitHub Actions role for OIDC deployments (must be imported manually!)
-# Run this before first apply:
-# terraform import aws_iam_role.github_actions_role github-actions-shiptivitas-role
 resource "aws_iam_role" "github_actions_role" {
-  name = "github-actions-shiptivitas-role"
+  count = var.create_github_actions_role ? 1 : 0
+   name = "github-actions-shiptivitas-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -64,8 +62,9 @@ resource "aws_iam_policy" "cloudfront_tag_read_policy" {
 
 # Attach the CloudFront tag read policy to the GitHub Actions role
 resource "aws_iam_role_policy_attachment" "attach_cloudfront_tag_read" {
-  role       = aws_iam_role.github_actions_role.name
-  policy_arn = aws_iam_policy.cloudfront_tag_read_policy.arn
+  count      = var.create_github_actions_role ? 1 : 0
+  role       = aws_iam_role.github_actions_role[0].name
+   policy_arn = aws_iam_policy.cloudfront_tag_read_policy.arn
 }
 
 # ----------------------------------------------------------
