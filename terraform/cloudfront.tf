@@ -1,12 +1,13 @@
-# Use existing CloudFront distribution if specified
+# Data source for existing CloudFront distribution
 data "aws_cloudfront_distribution" "existing" {
   count = var.use_existing_cdn ? 1 : 0
   id    = var.cloudfront_distribution_id
 }
 
-# Create Origin Access Control only if needed
+# Conditionally create OAC
 resource "aws_cloudfront_origin_access_control" "oac" {
-  count                             = var.use_existing_cdn ? 0 : 1
+  count = var.create_oac ? 1 : 0
+
   name                              = "shiptivitas-oac"
   description                       = "OAC for secure access to S3"
   origin_access_control_origin_type = "s3"
@@ -14,17 +15,23 @@ resource "aws_cloudfront_origin_access_control" "oac" {
   signing_protocol                  = "sigv4"
 }
 
-# Create CloudFront Distribution if not using an existing one
+# Local values to resolve origin_access_control_id and domain_name
+locals {
+  origin_access_control_id = var.create_oac ? aws_cloudfront_origin_access_control.oac[0].id : var.existing_oac_id
+
+  s3_domain_name = var.create_s3_bucket ? aws_s3_bucket.shiptivitas_frontend[0].bucket_regional_domain_name : "shiptivitas-frontend-bucket.s3.amazonaws.com"
+}
+
 resource "aws_cloudfront_distribution" "cdn" {
   count               = var.use_existing_cdn ? 0 : 1
   enabled             = true
   default_root_object = "index.html"
 
   origin {
-    domain_name = var.create_s3_bucket ? aws_s3_bucket.shiptivitas_frontend[0].bucket_regional_domain_name : "shiptivitas-frontend-bucket.s3.amazonaws.com"
-    origin_id   = "S3Origin"
+    domain_name = local.s3_domain_name
+    origin_id   = "S3Origin"   # Required and must be a simple string
 
-    origin_access_control_id = var.use_existing_cdn ? var.cloudfront_oac_id : aws_cloudfront_origin_access_control.oac[0].id
+    origin_access_control_id = local.origin_access_control_id
   }
 
   default_cache_behavior {
