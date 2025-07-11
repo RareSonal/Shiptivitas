@@ -67,3 +67,21 @@ variable "create_cdn" {
   type    = bool
   default = true
 }
+
+variable "use_existing_cdn" {
+  description = "Whether to use an existing CloudFront distribution"
+  type        = bool
+  default     = false
+}
+
+variable "cloudfront_distribution_id" {
+  description = "ID of the existing CloudFront distribution"
+  type        = string
+  default     = ""
+}
+
+variable "cloudfront_oac_id" {
+  description = "ID of the existing CloudFront OAC"
+  type        = string
+  default     = ""
+}
