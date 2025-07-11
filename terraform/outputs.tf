@@ -5,7 +5,7 @@ output "s3_bucket" {
 
 output "cloudfront_url" {
   description = "Domain name of the CloudFront distribution"
-  value       = try(aws_cloudfront_distribution.cdn.domain_name, "")
+  value       = var.use_existing_cdn ? try(data.aws_cloudfront_distribution.existing[0].domain_name, "") : try(aws_cloudfront_distribution.cdn[0].domain_name, "")
 }
 
 output "backend_ec2_public_ip" {
