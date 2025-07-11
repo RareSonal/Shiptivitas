@@ -96,3 +96,9 @@ variable "create_github_actions_role" {
   type    = bool
   default = true
 }
+
+variable "create_cloudfront_tag_read_policy" {
+  type    = bool
+  default = false  # Set to false by default to avoid recreating existing policy
+  description = "Whether to create the GitHubActions-CloudFrontTagRead IAM policy"
+}
