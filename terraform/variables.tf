@@ -91,3 +91,8 @@ variable "create_ec2" {
   type        = bool
   default     = true
 }
+
+variable "create_github_actions_role" {
+  type    = bool
+  default = true
+}
