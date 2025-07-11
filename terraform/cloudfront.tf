@@ -1,13 +1,10 @@
+# Use existing CloudFront distribution if specified
 data "aws_cloudfront_distribution" "existing" {
   count = var.use_existing_cdn ? 1 : 0
   id    = var.cloudfront_distribution_id
 }
 
-data "aws_cloudfront_origin_access_control" "existing_oac" {
-  count = var.use_existing_cdn ? 1 : 0
-  id    = var.cloudfront_oac_id
-}
-
+# Create Origin Access Control only if needed
 resource "aws_cloudfront_origin_access_control" "oac" {
   count                             = var.use_existing_cdn ? 0 : 1
   name                              = "shiptivitas-oac"
@@ -17,6 +14,7 @@ resource "aws_cloudfront_origin_access_control" "oac" {
   signing_protocol                  = "sigv4"
 }
 
+# Create CloudFront Distribution if not using an existing one
 resource "aws_cloudfront_distribution" "cdn" {
   count               = var.use_existing_cdn ? 0 : 1
   enabled             = true
@@ -26,7 +24,7 @@ resource "aws_cloudfront_distribution" "cdn" {
     domain_name = var.create_s3_bucket ? aws_s3_bucket.shiptivitas_frontend[0].bucket_regional_domain_name : "shiptivitas-frontend-bucket.s3.amazonaws.com"
     origin_id   = "S3Origin"
 
-    origin_access_control_id = var.use_existing_cdn ? data.aws_cloudfront_origin_access_control.existing_oac[0].id : aws_cloudfront_origin_access_control.oac[0].id
+    origin_access_control_id = var.use_existing_cdn ? var.cloudfront_oac_id : aws_cloudfront_origin_access_control.oac[0].id
   }
 
   default_cache_behavior {
