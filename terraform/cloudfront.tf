@@ -8,7 +8,6 @@ data "aws_caller_identity" "current" {}
 # Reference existing GitHub OIDC provider dynamically
 data "aws_iam_openid_connect_provider" "github" {
   arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
-  url = "https://token.actions.githubusercontent.com"
 }
 
 # Manage the GitHub Actions role for OIDC deployments (must be imported manually!)
