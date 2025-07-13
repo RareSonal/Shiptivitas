@@ -35,9 +35,9 @@ sleep 10
 
 # --- Fetch DB credentials from SSM ---
 echo "Fetching DB credentials from SSM..."
-db_user=$(aws ssm get-parameter --name "\${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_password=$(aws ssm get-parameter --name "\${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_host="\${db_host}"
+db_user=$(aws ssm get-parameter --name "$${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_password=$(aws ssm get-parameter --name "$${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_host="$${db_host}"
 
 # --- Clone project ---
 cd /home/ec2-user
@@ -54,29 +54,28 @@ find . -mindepth 1 -maxdepth 1 ! -name backend -exec rm -rf {} +
 # --- Create backend .env file ---
 echo "Creating .env file..."
 cat <<'EOF' > backend/.env
-DB_HOST=${db_host}
+DB_HOST=$${db_host}
 DB_PORT=5432
-DB_USER=${db_user}
-DB_PASSWORD=${db_password}
+DB_USER=$${db_user}
+DB_PASSWORD=$${db_password}
 DB_NAME=shiptivitas_db
 PORT=3001
 EOF
-
 
 # --- Function to check DB readiness ---
 check_db_ready() {
   local retries=10
   local wait=10
-  for i in \$(seq 1 \$retries); do
-    echo "Checking DB readiness (attempt \$i/\$retries)..."
-    if PGPASSWORD="\${db_password}" psql -h "\${db_host}" -U "\${db_user}" -d postgres -c '\q' >/dev/null 2>&1; then
+  for i in $(seq 1 $${retries}); do
+    echo "Checking DB readiness (attempt $${i}/$${retries})..."
+    if PGPASSWORD="$${db_password}" psql -h "$${db_host}" -U "$${db_user}" -d postgres -c '\q' >/dev/null 2>&1; then
       echo "DB is ready."
       return 0
     fi
-    echo "DB not ready, retrying in \${wait}s..."
-    sleep \$wait
+    echo "DB not ready, retrying in $${wait}s..."
+    sleep $${wait}
   done
-  echo "ERROR: Database not ready after \$((retries * wait)) seconds."
+  echo "ERROR: Database not ready after $$(($${retries} * $${wait})) seconds."
   return 1
 }
 
@@ -84,12 +83,12 @@ check_db_ready() {
 check_db_ready
 
 # --- Seed DB if not exists ---
-DB_EXISTS=\$(PGPASSWORD=\${db_password} psql -h \${db_host} -U \${db_user} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
-if [ "\$DB_EXISTS" != "1" ]; then
+DB_EXISTS=$$(PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
+if [ "$${DB_EXISTS}" != "1" ]; then
   echo "Seeding database..."
   curl -O https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
-  PGPASSWORD=\${db_password} psql -h \${db_host} -U \${db_user} -d postgres -c "CREATE DATABASE shiptivitas_db;"
-  PGPASSWORD=\${db_password} psql -h \${db_host} -U \${db_user} -d shiptivitas_db -f shiptivitas_postgres.sql
+  PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -c "CREATE DATABASE shiptivitas_db;"
+  PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d shiptivitas_db -f shiptivitas_postgres.sql
 else
   echo "Database already exists. Skipping seeding."
 fi
