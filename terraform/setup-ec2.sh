@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# === Log file ===
+# === Redirect output to log ===
 exec > >(tee /var/log/setup-ec2.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "===== Starting EC2 Setup ====="
@@ -20,13 +20,18 @@ if ! command -v docker &> /dev/null; then
   systemctl start docker
   usermod -aG docker ec2-user
 else
-  echo "Docker already installed"
+  echo "Docker already installed."
 fi
 
-# --- Reload shell to apply Docker group permission (for future sessions) ---
-newgrp docker <<EONG
-echo "Inside newgrp docker context..."
-EONG
+# --- Ensure Docker is running ---
+if ! systemctl is-active --quiet docker; then
+  echo "Starting Docker service..."
+  systemctl start docker
+fi
+
+# --- Wait for network to initialize ---
+echo "Waiting for network..."
+sleep 10
 
 # --- Fetch DB credentials from SSM ---
 echo "Fetching DB credentials from SSM..."
@@ -37,6 +42,7 @@ db_host="${db_host}"
 # --- Clone project ---
 cd /home/ec2-user
 if [ ! -d Shiptivitas ]; then
+  echo "Cloning repo..."
   git clone https://github.com/RareSonal/Shiptivitas.git
 fi
 cd Shiptivitas
