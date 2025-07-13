@@ -91,15 +91,13 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   role  = aws_iam_role.ec2_ssm_role[0].name
 }
 
-# Inject variables into the user_data shell script
-data "template_file" "setup_ec2_script" {
-  template = file("${path.module}/setup-ec2.sh")
-
-  vars = {
+# Replace template_file data source with templatefile() function
+locals {
+  ec2_user_data = templatefile("${path.module}/setup-ec2.sh", {
     db_host               = data.aws_db_instance.existing_rds.address
     db_username_ssm_path  = var.db_username_ssm_path
     db_password_ssm_path  = var.db_password_ssm_path
-  }
+  })
 }
 
 # EC2 Instance
@@ -113,7 +111,7 @@ resource "aws_instance" "shiptivitas_api" {
   vpc_security_group_ids      = [trimspace(var.security_group_id)]
   iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_profile[0].name
   associate_public_ip_address = true
-  user_data                   = data.template_file.setup_ec2_script.rendered
+  user_data                   = local.ec2_user_data
 
   lifecycle {
     create_before_destroy = true
