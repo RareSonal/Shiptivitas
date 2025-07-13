@@ -35,9 +35,9 @@ sleep 10
 
 # --- Fetch DB credentials from SSM ---
 echo "Fetching DB credentials from SSM..."
-db_user=$(aws ssm get-parameter --name "\${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_password=$(aws ssm get-parameter --name "\${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_host="\${db_host}"
+db_user=$(aws ssm get-parameter --name "${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_password=$(aws ssm get-parameter --name "${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_host="${db_host}"
 
 # --- Clone project ---
 cd /home/ec2-user
@@ -56,7 +56,7 @@ echo "Creating .env file..."
 cat <<EOF > backend/.env
 DB_HOST=\${db_host}
 DB_PORT=5432
-DB_USER=\${db_user}  
+DB_USER=\${db_user}
 DB_PASSWORD=\${db_password}
 DB_NAME=shiptivitas_db
 PORT=3001
