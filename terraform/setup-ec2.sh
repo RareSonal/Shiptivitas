@@ -56,7 +56,7 @@ echo "Creating .env file..."
 cat <<EOF > backend/.env
 DB_HOST=\${db_host}
 DB_PORT=5432
-DB_USER=\${db_user}
+DB_USER=\${db_user}  
 DB_PASSWORD=\${db_password}
 DB_NAME=shiptivitas_db
 PORT=3001
