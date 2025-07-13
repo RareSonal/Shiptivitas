@@ -24,7 +24,10 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# IAM role for EC2 to access SSM
+# AWS account identity (used for ARN interpolation)
+data "aws_caller_identity" "for_ec2" {}
+
+# IAM Role for EC2 to access SSM
 resource "aws_iam_role" "ec2_ssm_role" {
   count = var.create_iam_role && var.create_ec2 ? 1 : 0
 
@@ -42,7 +45,7 @@ resource "aws_iam_role" "ec2_ssm_role" {
   })
 }
 
-# Policy for reading DB creds from SSM
+# IAM Policy to allow reading SSM parameters
 resource "aws_iam_policy" "ssm_read_policy" {
   count = var.create_iam_role && var.create_ec2 ? 1 : 0
 
@@ -67,30 +70,28 @@ resource "aws_iam_policy" "ssm_read_policy" {
   })
 }
 
-# Attach policies to role
+# Attach custom policy to the role
 resource "aws_iam_role_policy_attachment" "ssm_read_policy_attach" {
   count      = var.create_iam_role && var.create_ec2 ? 1 : 0
   role       = aws_iam_role.ec2_ssm_role[0].name
   policy_arn = aws_iam_policy.ssm_read_policy[0].arn
 }
 
+# Attach AmazonSSMManagedInstanceCore for session manager access
 resource "aws_iam_role_policy_attachment" "ssm_managed_core" {
   count      = var.create_iam_role && var.create_ec2 ? 1 : 0
   role       = aws_iam_role.ec2_ssm_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# EC2 instance profile
+# EC2 Instance Profile
 resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   count = var.create_iam_profile && var.create_ec2 ? 1 : 0
   name  = "shiptivitas-ec2-ssm-profile"
   role  = aws_iam_role.ec2_ssm_role[0].name
 }
 
-# Get AWS account ID for ARN interpolation
-data "aws_caller_identity" "for_ec2" {}
-
-# Inject dynamic variables into the shell script
+# Inject variables into the user_data shell script
 data "template_file" "setup_ec2_script" {
   template = file("${path.module}/setup-ec2.sh")
 
