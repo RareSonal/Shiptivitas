@@ -59,8 +59,8 @@ resource "aws_iam_policy" "ssm_read_policy" {
           "ssm:GetParameters"
         ],
         Resource = [
-          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_username_ssm_path}",
-          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_password_ssm_path}"
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.for_ec2.account_id}:parameter${var.db_username_ssm_path}",
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.for_ec2.account_id}:parameter${var.db_password_ssm_path}"
         ]
       }
     ]
@@ -88,7 +88,7 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
 }
 
 # Get AWS account ID for ARN interpolation
-data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "for_ec2" {}
 
 # Inject dynamic variables into the shell script
 data "template_file" "setup_ec2_script" {
