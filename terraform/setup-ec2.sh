@@ -35,9 +35,9 @@ sleep 10
 
 # --- Fetch DB credentials from SSM ---
 echo "Fetching DB credentials from SSM..."
-db_user=$(aws ssm get-parameter --name "${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_password=$(aws ssm get-parameter --name "${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
-db_host="${db_host}"
+db_user=$(aws ssm get-parameter --name "\${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_password=$(aws ssm get-parameter --name "\${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
+db_host="\${db_host}"
 
 # --- Clone project ---
 cd /home/ec2-user
