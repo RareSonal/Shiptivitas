@@ -53,14 +53,15 @@ find . -mindepth 1 -maxdepth 1 ! -name backend -exec rm -rf {} +
 
 # --- Create backend .env file ---
 echo "Creating .env file..."
-cat <<EOF > backend/.env
-DB_HOST=\${db_host}
+cat <<'EOF' > backend/.env
+DB_HOST=${db_host}
 DB_PORT=5432
-DB_USER=\${db_user}
-DB_PASSWORD=\${db_password}
+DB_USER=${db_user}
+DB_PASSWORD=${db_password}
 DB_NAME=shiptivitas_db
 PORT=3001
 EOF
+
 
 # --- Function to check DB readiness ---
 check_db_ready() {
