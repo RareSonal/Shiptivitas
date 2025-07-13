@@ -1,59 +1,52 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Updating system..."
-yum update -y
+# === Log file ===
+exec > >(tee /var/log/setup-ec2.log | logger -t user-data -s 2>/dev/console) 2>&1
 
-echo "Installing dependencies: git, postgresql, jq, awscli..."
+echo "===== Starting EC2 Setup ====="
+
+# --- System update and dependencies ---
+echo "Updating system and installing packages..."
+yum update -y
 yum install -y git postgresql jq awscli
 
-echo "Installing Docker..."
-if yum install -y docker; then
-  echo "Docker installed successfully."
+# --- Install Docker if not present ---
+if ! command -v docker &> /dev/null; then
+  echo "Installing Docker..."
+  amazon-linux-extras enable docker
+  yum install -y docker
+  systemctl enable docker
+  systemctl start docker
+  usermod -aG docker ec2-user
 else
-  echo "ERROR: Docker installation failed!" >&2
-  exit 1
+  echo "Docker already installed"
 fi
 
-echo "Enabling and starting Docker service..."
-if systemctl enable docker && systemctl start docker; then
-  echo "Docker service started successfully."
-else
-  echo "ERROR: Failed to start Docker service!" >&2
-  journalctl -u docker.service --no-pager | tail -40
-  exit 1
-fi
+# --- Reload shell to apply Docker group permission (for future sessions) ---
+newgrp docker <<EONG
+echo "Inside newgrp docker context..."
+EONG
 
-echo "Adding ec2-user to docker group..."
-usermod -aG docker ec2-user || {
-  echo "WARNING: Failed to add ec2-user to docker group" >&2
-}
-
-echo "Verifying Docker installation..."
-if command -v docker >/dev/null 2>&1; then
-  docker --version
-else
-  echo "ERROR: Docker command not found after installation!" >&2
-  exit 1
-fi
-
-echo "Fetching DB credentials from SSM Parameter Store..."
+# --- Fetch DB credentials from SSM ---
+echo "Fetching DB credentials from SSM..."
 db_user=$(aws ssm get-parameter --name "${db_username_ssm_path}" --with-decryption --query Parameter.Value --output text)
 db_password=$(aws ssm get-parameter --name "${db_password_ssm_path}" --with-decryption --query Parameter.Value --output text)
 db_host="${db_host}"
 
+# --- Clone project ---
 cd /home/ec2-user
 if [ ! -d Shiptivitas ]; then
-  echo "Cloning Shiptivitas repo..."
   git clone https://github.com/RareSonal/Shiptivitas.git
 fi
-
 cd Shiptivitas
 
-echo "Cleaning unnecessary folders..."
+# --- Remove all except backend and database ---
+echo "Cleaning up unnecessary folders..."
 find . -mindepth 1 -maxdepth 1 ! -name backend -exec rm -rf {} +
 
-echo "Writing backend/.env file..."
+# --- Create backend .env file ---
+echo "Creating .env file..."
 cat <<EOF > backend/.env
 DB_HOST=${db_host}
 DB_PORT=5432
@@ -63,26 +56,27 @@ DB_NAME=shiptivitas_db
 PORT=3001
 EOF
 
+# --- Function to check DB readiness ---
 check_db_ready() {
   local retries=10
   local wait=10
   for i in $(seq 1 $retries); do
     echo "Checking DB readiness (attempt $i/$retries)..."
-    if PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -c '\q'; then
+    if PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -c '\q' >/dev/null 2>&1; then
+      echo "DB is ready."
       return 0
     fi
-    echo "DB not ready, waiting $wait seconds..."
+    echo "DB not ready, retrying in ${wait}s..."
     sleep $wait
   done
-  echo "ERROR: DB not ready after $((retries * wait)) seconds."
+  echo "ERROR: Database not ready after $((retries * wait)) seconds."
   return 1
 }
 
-if ! check_db_ready; then
-  echo "Exiting: DB not reachable."
-  exit 1
-fi
+# --- Check DB readiness ---
+check_db_ready
 
+# --- Seed DB if not exists ---
 DB_EXISTS=$(PGPASSWORD=${db_password} psql -h ${db_host} -U ${db_user} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
 if [ "$DB_EXISTS" != "1" ]; then
   echo "Seeding database..."
@@ -90,13 +84,14 @@ if [ "$DB_EXISTS" != "1" ]; then
   PGPASSWORD=${db_password} psql -h ${db_host} -U ${db_user} -d postgres -c "CREATE DATABASE shiptivitas_db;"
   PGPASSWORD=${db_password} psql -h ${db_host} -U ${db_user} -d shiptivitas_db -f shiptivitas_postgres.sql
 else
-  echo "Database already exists, skipping seeding."
+  echo "Database already exists. Skipping seeding."
 fi
 
-echo "Starting backend container..."
+# --- Run backend inside Docker ---
+echo "Running backend inside Docker container..."
 docker run -d \
   --name shiptivitas-backend \
-  --restart always \
+  --restart unless-stopped \
   -p 3001:3001 \
   -v /home/ec2-user/Shiptivitas/backend:/usr/src/app \
   -w /usr/src/app \
@@ -104,4 +99,4 @@ docker run -d \
   node:18 \
   sh -c "npm install && npm install -g babel-watch && babel-watch server.js"
 
-echo "Setup complete."
+echo "===== EC2 setup complete. Backend is running. ====="
