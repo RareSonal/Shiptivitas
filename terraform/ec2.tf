@@ -98,6 +98,10 @@ locals {
     db_username_ssm_path = var.db_username_ssm_path
     db_password_ssm_path = var.db_password_ssm_path
     seed_db              = tostring(var.seed_db)
+
+    # These two are only used inside the script after SSM fetch — just placeholders
+    db_user               = "ignored"
+    db_password           = "ignored"
   })
 }
 
