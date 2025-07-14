@@ -102,6 +102,8 @@ locals {
     # These two are only used inside the script after SSM fetch — just placeholders
     db_user               = "ignored"
     db_password           = "ignored"
+    retries               = 10
+    wait                  = 10
   })
 }
 
