@@ -107,3 +107,11 @@ variable "seed_db" {
   type    = bool
   default = false
 }
+
+variable "ec2_security_group_id" {
+  default = "sg-0965338ad1360b60a"
+}
+
+variable "rds_security_group_id" {
+  default = "sg-05effc7ccd85b98ec"
+}
