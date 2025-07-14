@@ -102,3 +102,8 @@ variable "create_cloudfront_tag_read_policy" {
   default = false  # Set to false by default to avoid recreating existing policy
   description = "Whether to create the GitHubActions-CloudFrontTagRead IAM policy"
 }
+
+variable "seed_db" {
+  type    = bool
+  default = false
+}
