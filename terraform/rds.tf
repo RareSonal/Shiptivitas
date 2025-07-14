@@ -15,12 +15,13 @@ data "aws_ssm_parameter" "db_password" {
   with_decryption = true
 }
 
-# Allow EC2 to connect to RDS via port 5432 (PostgreSQL)
+# Allow EC2 to connect to RDS via port 5432 (PostgreSQL) — conditional
 resource "aws_security_group_rule" "allow_ec2_to_rds" {
   count = (
+    var.create_security_rule &&
     trimspace(var.rds_security_group_id) != "" &&
-    trimspace(var.ec2_security_group_id) != "" ? 1 : 0
-  )
+    trimspace(var.ec2_security_group_id) != ""
+  ) ? 1 : 0
 
   type                     = "ingress"
   from_port                = 5432
@@ -32,6 +33,5 @@ resource "aws_security_group_rule" "allow_ec2_to_rds" {
 
   lifecycle {
     create_before_destroy = true
-    ignore_changes        = [description]
   }
 }
