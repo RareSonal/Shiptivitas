@@ -65,17 +65,17 @@ EOF
 check_db_ready() {
   local retries=10
   local wait=10
-  for i in $(seq 1 ${retries}); do
-    echo "Checking DB readiness (attempt \${i}/${retries})..."
+  for i in $(seq 1 $${retries}); do
+    echo "Checking DB readiness (attempt $${i}/$${retries})..."
     if PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -c '\q' >/dev/null 2>&1; then
       echo "DB is ready."
       return 0
     fi
-      echo "DB not ready, retrying in ${wait}s..."
-      sleep ${wait}
-    done
+    echo "DB not ready, retrying in $${wait}s..."
+    sleep $${wait}
+  done
 
-  echo "ERROR: Database not ready after $((retries * wait)) seconds."
+  echo "ERROR: Database not ready after $$(($${retries} * $${wait})) seconds."
   return 1
 }
 
