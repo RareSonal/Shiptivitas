@@ -17,3 +17,7 @@ output "backend_ec2_public_ip" {
   description = "Public IP of the backend EC2 instance"
   value       = var.create_ec2 ? aws_instance.shiptivitas_api[0].public_ip : null
 }
+
+output "user_data_rendered" {
+  value = local.ec2_user_data
+}
