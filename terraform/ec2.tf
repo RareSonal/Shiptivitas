@@ -91,18 +91,17 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   role  = aws_iam_role.ec2_ssm_role[0].name
 }
 
-# Replace template_file data source with templatefile() function
+# Render user data using templatefile()
 locals {
   ec2_user_data = templatefile("${path.module}/setup-ec2.sh", {
-    db_host               = data.aws_db_instance.existing_rds.address
-    db_username_ssm_path  = var.db_username_ssm_path
-    db_password_ssm_path  = var.db_password_ssm_path
-    seed_db               = var.seed_db
-
+    db_host              = data.aws_db_instance.existing_rds.address
+    db_username_ssm_path = var.db_username_ssm_path
+    db_password_ssm_path = var.db_password_ssm_path
+    seed_db              = tostring(var.seed_db)
   })
 }
 
-# EC2 Instance
+# EC2 Instance for the backend API
 resource "aws_instance" "shiptivitas_api" {
   count = var.create_ec2 ? 1 : 0
 
@@ -113,7 +112,7 @@ resource "aws_instance" "shiptivitas_api" {
   vpc_security_group_ids      = [trimspace(var.security_group_id)]
   iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_profile[0].name
   associate_public_ip_address = true
-  user_data                   = local.ec2_user_data
+  user_data                   = base64encode(local.ec2_user_data)
 
   lifecycle {
     create_before_destroy = true
