@@ -115,3 +115,9 @@ variable "ec2_security_group_id" {
 variable "rds_security_group_id" {
   default = "sg-05effc7ccd85b98ec"
 }
+
+variable "create_security_rule" {
+  description = "Whether to create the EC2-to-RDS security group rule"
+  type        = bool
+  default     = true
+}
