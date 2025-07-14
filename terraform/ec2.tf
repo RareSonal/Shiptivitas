@@ -97,6 +97,8 @@ locals {
     db_host               = data.aws_db_instance.existing_rds.address
     db_username_ssm_path  = var.db_username_ssm_path
     db_password_ssm_path  = var.db_password_ssm_path
+    seed_db               = var.seed_db
+
   })
 }
 
