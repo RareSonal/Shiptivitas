@@ -34,20 +34,4 @@ resource "aws_security_group_rule" "allow_ec2_to_rds" {
     create_before_destroy = true
     ignore_changes        = [description]
   }
-
-  # Workaround to suppress duplicate creation errors
-  depends_on = [
-    data.aws_security_group_rule_existing_allow
-  ]
-}
-
-# Detect if the rule already exists (dummy, with no effect)
-data "aws_security_group_rule" "existing_allow" {
-  count                = 0
-  security_group_id    = var.rds_security_group_id
-  type                 = "ingress"
-  from_port            = 5432
-  to_port              = 5432
-  protocol             = "tcp"
-  source_security_group_id = var.ec2_security_group_id
 }
