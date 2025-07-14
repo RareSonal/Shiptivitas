@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # === Redirect output to log ===
+echo "===== BEGIN setup-ec2.sh =====" | tee /tmp/startup.log
 exec > >(tee /var/log/setup-ec2.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "===== Starting EC2 Setup ====="
