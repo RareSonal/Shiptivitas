@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# === Redirect output to log ===
-echo "===== BEGIN setup-ec2.sh =====" | tee /tmp/startup.log
 exec > >(tee /var/log/setup-ec2.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "===== Starting EC2 Setup ====="
@@ -30,7 +28,6 @@ if ! systemctl is-active --quiet docker; then
   systemctl start docker
 fi
 
-# --- Wait for network to initialize ---
 echo "Waiting for network..."
 sleep 10
 
@@ -48,13 +45,13 @@ if [ ! -d Shiptivitas ]; then
 fi
 cd Shiptivitas
 
-# --- Remove all except backend and database ---
+# --- Clean up ---
 echo "Cleaning up unnecessary folders..."
 find . -mindepth 1 -maxdepth 1 ! -name backend -exec rm -rf {} +
 
-# --- Create backend .env file ---
+# --- Create .env for backend ---
 echo "Creating .env file..."
-cat <<'EOF' > backend/.env
+cat <<EOF > backend/.env
 DB_HOST=$${db_host}
 DB_PORT=5432
 DB_USER=$${db_user}
@@ -83,19 +80,24 @@ check_db_ready() {
 # --- Check DB readiness ---
 check_db_ready
 
-# --- Seed DB if not exists ---
-DB_EXISTS=$$(PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
-if [ "$${DB_EXISTS}" != "1" ]; then
-  echo "Seeding database..."
-  curl -O https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
-  PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -c "CREATE DATABASE shiptivitas_db;"
-  PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d shiptivitas_db -f shiptivitas_postgres.sql
+# --- Conditionally seed DB ---
+if [ "$${seed_db}" = "true" ]; then
+  echo "Checking if database 'shiptivitas_db' exists..."
+  DB_EXISTS=$$(PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
+  if [ "$${DB_EXISTS}" != "1" ]; then
+    echo "Seeding database..."
+    curl -O https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+    PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d postgres -c "CREATE DATABASE shiptivitas_db;"
+    PGPASSWORD=$${db_password} psql -h $${db_host} -U $${db_user} -d shiptivitas_db -f shiptivitas_postgres.sql
+  else
+    echo "Database already exists. Skipping seeding."
+  fi
 else
-  echo "Database already exists. Skipping seeding."
+  echo "Database seeding disabled via SEED_DB flag. Skipping..."
 fi
 
 # --- Run backend inside Docker ---
-echo "Running backend inside Docker container..."
+echo "Running backend inside Docker..."
 docker run -d \
   --name shiptivitas-backend \
   --restart unless-stopped \
