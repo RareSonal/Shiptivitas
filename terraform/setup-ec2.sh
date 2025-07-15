@@ -100,8 +100,8 @@ check_db_ready
 # --- Conditionally seed DB if flag is true ---
 if [ "${seed_db}" = "true" ]; then
   echo "$$(date): Checking if database 'shiptivitas_db' exists..."
-  DB_EXISTS=$(PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
-  if [ "${DB_EXISTS}" != "1" ]; then
+  DB_EXISTS=$$(PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='shiptivitas_db'")
+  if [ "$${DB_EXISTS}" != "1" ]; then
     echo "$$(date): Creating and seeding database 'shiptivitas_db'..."
     curl -O https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
     PGPASSWORD="${db_password}" psql -h "${db_host}" -U "${db_user}" -d postgres -c "CREATE DATABASE shiptivitas_db;"
