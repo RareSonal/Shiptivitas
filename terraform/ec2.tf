@@ -24,10 +24,10 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# AWS account identity (used for ARN interpolation)
+# AWS account identity (used for SSM parameter ARNs)
 data "aws_caller_identity" "for_ec2" {}
 
-# IAM Role for EC2 to access SSM
+# IAM Role to allow EC2 to access SSM parameters
 resource "aws_iam_role" "ec2_ssm_role" {
   count = var.create_iam_role && var.create_ec2 ? 1 : 0
 
@@ -45,7 +45,7 @@ resource "aws_iam_role" "ec2_ssm_role" {
   })
 }
 
-# IAM Policy to allow reading SSM parameters
+# IAM policy to allow reading DB credentials from SSM
 resource "aws_iam_policy" "ssm_read_policy" {
   count = var.create_iam_role && var.create_ec2 ? 1 : 0
 
@@ -70,44 +70,41 @@ resource "aws_iam_policy" "ssm_read_policy" {
   })
 }
 
-# Attach custom policy to the role
+# Attach SSM policy and session manager access to EC2 IAM role
 resource "aws_iam_role_policy_attachment" "ssm_read_policy_attach" {
   count      = var.create_iam_role && var.create_ec2 ? 1 : 0
   role       = aws_iam_role.ec2_ssm_role[0].name
   policy_arn = aws_iam_policy.ssm_read_policy[0].arn
 }
 
-# Attach AmazonSSMManagedInstanceCore for session manager access
 resource "aws_iam_role_policy_attachment" "ssm_managed_core" {
   count      = var.create_iam_role && var.create_ec2 ? 1 : 0
   role       = aws_iam_role.ec2_ssm_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# EC2 Instance Profile
+# EC2 instance profile for attaching the IAM role
 resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   count = var.create_iam_profile && var.create_ec2 ? 1 : 0
   name  = "shiptivitas-ec2-ssm-profile"
   role  = aws_iam_role.ec2_ssm_role[0].name
 }
 
-# Render user data using templatefile()
+# Rendered user_data (setup script with interpolated vars)
 locals {
   ec2_user_data = templatefile("${path.module}/setup-ec2.sh", {
     db_host              = data.aws_db_instance.existing_rds.address
     db_username_ssm_path = var.db_username_ssm_path
     db_password_ssm_path = var.db_password_ssm_path
     seed_db              = tostring(var.seed_db)
-
-    # These two are only used inside the script after SSM fetch — just placeholders
-    db_user               = "ignored"
-    db_password           = "ignored"
-    retries               = 10
-    wait                  = 10
+    db_user              = "ignored"
+    db_password          = "ignored"
+    retries              = 10
+    wait                 = 10
   })
 }
 
-# EC2 Instance for the backend API
+# EC2 instance for backend API
 resource "aws_instance" "shiptivitas_api" {
   count = var.create_ec2 ? 1 : 0
 
@@ -119,6 +116,11 @@ resource "aws_instance" "shiptivitas_api" {
   iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_profile[0].name
   associate_public_ip_address = true
   user_data                   = base64encode(local.ec2_user_data)
+
+  # Make sure EC2 does not launch before the RDS access rule is created
+  depends_on = [
+    aws_security_group_rule.allow_ec2_to_rds
+  ]
 
   lifecycle {
     create_before_destroy = true
