@@ -18,3 +18,7 @@ output "backend_ec2_public_ip" {
   value       = var.create_ec2 ? aws_instance.shiptivitas_api[0].public_ip : null
 }
 
+output "rds_endpoint" {
+  description = "Endpoint of the existing PostgreSQL RDS instance"
+  value       = data.aws_db_instance.existing_rds.address
+}
