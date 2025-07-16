@@ -2,6 +2,21 @@
 
 set -e
 
+# Backup current cloud.cfg if not already backed up
+if [ ! -f /etc/cloud/cloud.cfg.bak ]; then
+    echo "Backing up /etc/cloud/cloud.cfg to /etc/cloud/cloud.cfg.bak"
+    sudo cp /etc/cloud/cloud.cfg /etc/cloud/cloud.cfg.bak
+fi
+
+# Configure cloud-init to run user scripts on every boot if not already configured
+if ! grep -q 'scripts-user, always' /etc/cloud/cloud.cfg; then
+    echo "Configuring cloud-init to run user scripts on every boot..."
+    sudo sed -i '/^cloud_final_modules:/,/^[^ ]/c\
+cloud_final_modules:\n - [scripts-user, always]' /etc/cloud/cloud.cfg
+else
+    echo "cloud-init already configured to run user scripts always."
+fi
+
 # Check if Docker is already installed
 if command -v docker &> /dev/null; then
     echo "Docker is already installed."
