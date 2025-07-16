@@ -1,0 +1,228 @@
+# -----------------------------------------
+# 🚀 Deploy Shiptivitas Infrastructure
+# -----------------------------------------
+name: Deploy Shiptivitas Infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 🚀 Deploy AWS Resources with Terraform
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: 🧾 Checkout Code
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: 🔐 Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: ⚙️ Terraform Init (Azure Backend)
+        run: terraform init
+
+      # -----------------------------
+      # Resource Existence Checks
+      # -----------------------------
+      - name: 🔍 Check if S3 Bucket Exists
+        run: |
+          if aws s3api head-bucket --bucket shiptivitas-frontend-bucket 2>/dev/null; then
+            echo "CREATE_S3_BUCKET=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_S3_BUCKET=true" >> $GITHUB_ENV
+          fi
+      - name: 🔍 Check if IAM Role Exists
+        run: |
+          if aws iam get-role --role-name shiptivitas-ec2-ssm-role 2>/dev/null; then
+            echo "CREATE_IAM_ROLE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_IAM_ROLE=true" >> $GITHUB_ENV
+          fi
+      - name: 🔍 Check if IAM Instance Profile Exists
+        run: |
+          if aws iam get-instance-profile --instance-profile-name shiptivitas-ec2-ssm-profile 2>/dev/null; then
+            echo "CREATE_IAM_PROFILE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_IAM_PROFILE=true" >> $GITHUB_ENV
+          fi
+      - name: 🔍 Check if CloudFront OAC Exists
+        run: |
+          OAC_ID=$(aws cloudfront list-origin-access-controls \
+            --query "OriginAccessControlList.Items[?Name=='shiptivitas-oac'].Id" \
+            --output text)
+          if [ -z "$OAC_ID" ]; then
+            echo "CREATE_OAC=true" >> $GITHUB_ENV
+            echo "EXISTING_OAC_ID=" >> $GITHUB_ENV
+          else
+            echo "CREATE_OAC=false" >> $GITHUB_ENV
+            echo "EXISTING_OAC_ID=$OAC_ID" >> $GITHUB_ENV
+          fi
+      - name: 🔍 Check if EC2 Instance Exists
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=Shiptivitas-API" \
+            --query "Reservations[*].Instances[*].InstanceId" \
+            --output text)
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "CREATE_EC2=true" >> $GITHUB_ENV
+          else
+            echo "CREATE_EC2=false" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if CloudFront Distribution Exists by Tag
+        run: |
+          echo "🔎 Looking for CloudFront distribution tagged Name=shiptivitas-cdn..."
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ALL_DIST_IDS=$(aws cloudfront list-distributions --query "DistributionList.Items[*].Id" --output text)
+          DIST_ID=""
+            for ID in $ALL_DIST_IDS; do
+              ARN="arn:aws:cloudfront::${ACCOUNT_ID}:distribution/$ID"
+              echo "✅ Inspecting ARN: $ARN"
+              TAG_NAME=$(aws cloudfront list-tags-for-resource \
+                --resource "$ARN" \
+                --query "Tags.Items[?Key=='Name'].Value | [0]" \
+                --output text 2>/dev/null || true)
+              echo "🔖 Tag for $ID: '${TAG_NAME}'"
+              if [ ! -z "$TAG_NAME" ] && [ "$TAG_NAME" = "shiptivitas-cdn" ]; then
+                DIST_ID=$ID
+                break
+              fi
+            done
+            if [ -z "$DIST_ID" ]; then
+              echo "✅ No existing CloudFront distribution found."
+              echo "USE_EXISTING_CDN=false" >> $GITHUB_ENV
+              echo "CLOUDFRONT_DISTRIBUTION_ID=" >> $GITHUB_ENV
+            else
+              echo "✅ Found existing CloudFront distribution: $DIST_ID"
+              echo "USE_EXISTING_CDN=true" >> $GITHUB_ENV
+              echo "CLOUDFRONT_DISTRIBUTION_ID=$DIST_ID" >> $GITHUB_ENV
+            fi
+      - name: 🧮 Ensure Boolean Fallbacks
+        run: |
+          echo "USE_EXISTING_CDN=${USE_EXISTING_CDN:-false}" >> $GITHUB_ENV
+          echo "CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID:-}" >> $GITHUB_ENV
+          echo "CREATE_CLOUD_FRONT_POLICY=${CREATE_CLOUD_FRONT_POLICY:-false}" >> $GITHUB_ENV
+          echo "CREATE_GITHUB_ROLE=${CREATE_GITHUB_ROLE:-false}" >> $GITHUB_ENV
+      # -----------------------------
+      # Check if GitHub IAM Role Exists
+      # -----------------------------
+      - name: 🔍 Check if GitHub IAM Role Exists
+        run: |
+          if aws iam get-role --role-name github-actions-shiptivitas-role 2>/dev/null; then
+            echo "CREATE_GITHUB_ROLE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_GITHUB_ROLE=true" >> $GITHUB_ENV
+          fi
+      # -----------------------------
+      # Check if GitHub IAM Policy Exists
+      # -----------------------------
+      - name: 🔍 Check if GitHub IAM Policy Exists
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          if aws iam get-policy --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/GitHubActions-CloudFrontTagRead 2>/dev/null; then
+            echo "CREATE_CLOUD_FRONT_POLICY=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_CLOUD_FRONT_POLICY=true" >> $GITHUB_ENV
+          fi
+      # -----------------------------
+      # Prepare Variables
+      # -----------------------------
+      - name: 🧼 Sanitize Secrets
+        run: |
+          echo "db_instance_identifier=${{ secrets.DB_INSTANCE_IDENTIFIER }}" >> $GITHUB_ENV
+          echo "db_username_ssm_path=${{ secrets.DB_USERNAME_SSM_PATH }}" >> $GITHUB_ENV
+          echo "db_password_ssm_path=${{ secrets.DB_PASSWORD_SSM_PATH }}" >> $GITHUB_ENV
+          echo "public_subnet_id=${{ secrets.AWS_PUBLIC_SUBNET_ID }}" >> $GITHUB_ENV
+          echo "security_group_id=${{ secrets.AWS_SECURITY_GROUP_ID }}" >> $GITHUB_ENV
+      # ----------------------------- 
+      # Terraform Plan
+      # -----------------------------
+      - name: 📋 Terraform Plan and Save Output
+        id: tf_plan
+        run: |
+          terraform plan \
+            -var="key_name=${{ secrets.AWS_KEY_PAIR_NAME }}" \
+            -var="db_instance_identifier=${{ env.db_instance_identifier }}" \
+            -var="db_username_ssm_path=${{ env.db_username_ssm_path }}" \
+            -var="db_password_ssm_path=${{ env.db_password_ssm_path }}" \
+            -var="vpc_id=${{ secrets.VPC_ID }}" \
+            -var="public_subnet_id=${{ env.public_subnet_id }}" \
+            -var="security_group_id=${{ env.security_group_id }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="create_s3_bucket=${{ env.CREATE_S3_BUCKET }}" \
+            -var="create_iam_role=${{ env.CREATE_IAM_ROLE }}" \
+            -var="create_iam_profile=${{ env.CREATE_IAM_PROFILE }}" \
+            -var="create_oac=${{ env.CREATE_OAC }}" \
+            -var="existing_oac_id=${{ env.EXISTING_OAC_ID }}" \
+            -var="create_ec2=${{ env.CREATE_EC2 }}" \
+            -var="create_cdn=true" \
+            -var="use_existing_cdn=${{ env.USE_EXISTING_CDN }}" \
+            -var="cloudfront_distribution_id=${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            -var="cloudfront_oac_id=${{ env.CLOUDFRONT_OAC_ID }}" \
+            -var="create_github_actions_role=${{ env.CREATE_GITHUB_ROLE }}" \
+            -var="create_cloudfront_tag_read_policy=${{ env.CREATE_CLOUD_FRONT_POLICY }}" \
+            -var="create_security_rule=false" \
+            -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+          if grep -q "No changes." plan.txt; then
+            echo "NO_CHANGES=true" >> $GITHUB_ENV
+          else
+            echo "NO_CHANGES=false" >> $GITHUB_ENV
+          fi
+      # -----------------------------
+      # Terraform Apply
+      # -----------------------------
+      - name: 🚀 Terraform Apply (If Changes)
+        if: env.NO_CHANGES == 'false'
+        run: terraform apply -auto-approve tfplan
+
+      - name: ⏭️ Skip Apply (No Changes Detected)
+        if: env.NO_CHANGES == 'true'
+        run: echo "✅ No infrastructure changes detected. Skipping apply."
+
+      # -----------------------------
+      # Frontend Build & Deploy
+      # -----------------------------
+      - name: 🛠️ Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 🚧 Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: 📂 List build directory
+        working-directory: frontend
+        run: ls -la build
+
+      - name: 📤 Upload Frontend to S3
+        working-directory: frontend
+        run: |
+          aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
