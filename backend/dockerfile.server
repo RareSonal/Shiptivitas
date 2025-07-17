@@ -1,0 +1,18 @@
+# Use official Node.js LTS image
+FROM node:18
+
+# Set working directory
+WORKDIR /app
+
+# Install backend dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy backend source code
+COPY . .
+
+# Expose your server port (matches server.js)
+EXPOSE 3001
+
+# Start the server
+CMD ["node", "server.js"]
