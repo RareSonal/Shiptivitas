@@ -23,6 +23,10 @@ jobs:
       ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
 
     defaults:
       run:
@@ -49,6 +53,7 @@ jobs:
       # -----------------------------
       # Resource Existence Checks
       # -----------------------------
+      
       - name: 🔍 Check if S3 Bucket Exists
         run: |
           if aws s3api head-bucket --bucket shiptivitas-frontend-bucket 2>/dev/null; then
@@ -56,6 +61,7 @@ jobs:
           else
             echo "CREATE_S3_BUCKET=true" >> $GITHUB_ENV
           fi
+          
       - name: 🔍 Check if IAM Role Exists
         run: |
           if aws iam get-role --role-name shiptivitas-ec2-ssm-role 2>/dev/null; then
@@ -63,6 +69,7 @@ jobs:
           else
             echo "CREATE_IAM_ROLE=true" >> $GITHUB_ENV
           fi
+          
       - name: 🔍 Check if IAM Instance Profile Exists
         run: |
           if aws iam get-instance-profile --instance-profile-name shiptivitas-ec2-ssm-profile 2>/dev/null; then
@@ -70,6 +77,7 @@ jobs:
           else
             echo "CREATE_IAM_PROFILE=true" >> $GITHUB_ENV
           fi
+          
       - name: 🔍 Check if CloudFront OAC Exists
         run: |
           OAC_ID=$(aws cloudfront list-origin-access-controls \
@@ -82,6 +90,7 @@ jobs:
             echo "CREATE_OAC=false" >> $GITHUB_ENV
             echo "EXISTING_OAC_ID=$OAC_ID" >> $GITHUB_ENV
           fi
+          
       - name: 🔍 Check if EC2 Instance Exists
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
@@ -122,15 +131,18 @@ jobs:
               echo "USE_EXISTING_CDN=true" >> $GITHUB_ENV
               echo "CLOUDFRONT_DISTRIBUTION_ID=$DIST_ID" >> $GITHUB_ENV
             fi
+            
       - name: 🧮 Ensure Boolean Fallbacks
         run: |
           echo "USE_EXISTING_CDN=${USE_EXISTING_CDN:-false}" >> $GITHUB_ENV
           echo "CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID:-}" >> $GITHUB_ENV
           echo "CREATE_CLOUD_FRONT_POLICY=${CREATE_CLOUD_FRONT_POLICY:-false}" >> $GITHUB_ENV
           echo "CREATE_GITHUB_ROLE=${CREATE_GITHUB_ROLE:-false}" >> $GITHUB_ENV
+          
       # -----------------------------
       # Check if GitHub IAM Role Exists
       # -----------------------------
+      
       - name: 🔍 Check if GitHub IAM Role Exists
         run: |
           if aws iam get-role --role-name github-actions-shiptivitas-role 2>/dev/null; then
@@ -138,9 +150,11 @@ jobs:
           else
             echo "CREATE_GITHUB_ROLE=true" >> $GITHUB_ENV
           fi
+          
       # -----------------------------
       # Check if GitHub IAM Policy Exists
       # -----------------------------
+      
       - name: 🔍 Check if GitHub IAM Policy Exists
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -149,9 +163,11 @@ jobs:
           else
             echo "CREATE_CLOUD_FRONT_POLICY=true" >> $GITHUB_ENV
           fi
+          
       # -----------------------------
       # Prepare Variables
       # -----------------------------
+      
       - name: 🧼 Sanitize Secrets
         run: |
           echo "db_instance_identifier=${{ secrets.DB_INSTANCE_IDENTIFIER }}" >> $GITHUB_ENV
@@ -159,9 +175,11 @@ jobs:
           echo "db_password_ssm_path=${{ secrets.DB_PASSWORD_SSM_PATH }}" >> $GITHUB_ENV
           echo "public_subnet_id=${{ secrets.AWS_PUBLIC_SUBNET_ID }}" >> $GITHUB_ENV
           echo "security_group_id=${{ secrets.AWS_SECURITY_GROUP_ID }}" >> $GITHUB_ENV
+          
       # ----------------------------- 
       # Terraform Plan
       # -----------------------------
+      
       - name: 📋 Terraform Plan and Save Output
         id: tf_plan
         run: |
@@ -194,9 +212,11 @@ jobs:
           else
             echo "NO_CHANGES=false" >> $GITHUB_ENV
           fi
+          
       # -----------------------------
       # Terraform Apply
       # -----------------------------
+      
       - name: 🚀 Terraform Apply (If Changes)
         if: env.NO_CHANGES == 'false'
         run: terraform apply -auto-approve tfplan
@@ -208,6 +228,7 @@ jobs:
       # -----------------------------
       # Frontend Build & Deploy
       # -----------------------------
+      
       - name: 🛠️ Set up Node.js
         uses: actions/setup-node@v3
         with:
@@ -218,6 +239,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          
       - name: 📂 List build directory
         working-directory: frontend
         run: ls -la build
@@ -226,3 +248,97 @@ jobs:
         working-directory: frontend
         run: |
           aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
+
+      # -------------------------------------------------------
+      # Backend Docker build, deploy, DB download & seed/verify
+      # -------------------------------------------------------
+      
+      - name: 🔧 Build & push backend Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
+
+      - name: 🌐 Wait for RDS availability
+        run: |
+          echo "⏳ Waiting for RDS 'stockwishlist-postgres'..."
+          for i in {1..30}; do
+            STATUS=$(aws rds describe-db-instances \
+              --db-instance-identifier stockwishlist-postgres \
+              --region $AWS_REGION \
+              --query "DBInstances[0].DBInstanceStatus" \
+              --output text)
+            [ "$STATUS" = "available" ] && break
+            echo "🔎 Status: $STATUS (retrying...)"
+            sleep 10
+          done
+          if [ "$STATUS" != "available" ]; then
+            echo "❌ RDS not available"
+            exit 1
+          fi
+          echo "✅ RDS is available"
+
+      - name: 📥 Download latest SQL seed file
+        run: |
+         echo "🔄 Downloading latest shiptivitas_postgres.sql"
+         curl -L -o database/shiptivitas_postgres.sql \
+         https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+
+      - name: 💾 Install dependencies for seed script
+        working-directory: backend
+        run: npm ci
+
+      - name: 🌱 Seed PostgreSQL DB via Node.js
+        working-directory: backend
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          SQL_FILE_PATH: ../database/shiptivitas_postgres.sql
+        run: |
+          node seed_db.js seed
+
+      - name: 🕵️ Verify DB tables & data
+        working-directory: backend
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          SQL_FILE_PATH: ../database/shiptivitas_postgres.sql
+        run: |
+          node seed_db.js verify
+
+      # -------------------------------------------------------
+      # Deploy backend Docker image to EC2
+      # -------------------------------------------------------
+      
+      - name: 🧪 Fetch EC2 public IP
+        id: ec2_info
+        run: |
+          IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=Shiptivitas-API" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+          echo "EC2_IP=$IP" >> $GITHUB_ENV
+
+      - name: 🚢 Deploy backend on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ env.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
+            docker stop shiptivitas-backend || true
+            docker rm shiptivitas-backend || true
+            docker run -d \
+              --name shiptivitas-backend \
+              -p 3001:3001 \
+              -e DB_HOST=${{ secrets.DB_HOST }} \
+              -e DB_NAME=${{ secrets.DB_NAME }} \
+              -e DB_USER=${{ secrets.DB_USER }} \
+              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+              ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
