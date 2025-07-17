@@ -1,4 +1,4 @@
-// backend/seed.js
+// backend/seed_db.js
 
 import fs from 'fs';
 import path from 'path';
