@@ -1,49 +1,51 @@
 // server.js
 import express from 'express';
-import mssql from 'mssql';
+import pkg from 'pg';
 import dotenv from 'dotenv';
 import cors from 'cors';
 
 dotenv.config();
+const { Pool } = pkg;
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// SQL Server config
-const sqlConfig = {
+// PostgreSQL config
+const pool = new Pool({
   user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
+  host: process.env.DB_SERVER,
   database: process.env.DB_NAME,
-  options: {
-    encrypt: true,
-    trustServerCertificate: true,
-  },
-};
+  password: process.env.DB_PASSWORD,
+  port: 5432, // default PostgreSQL port
+});
 
-const pool = new mssql.ConnectionPool(sqlConfig);
-const poolConnect = pool.connect();
+// Test connection
+pool.connect()
+  .then(client => {
+    console.log('✅ Connected to PostgreSQL');
+    client.release();
+  })
+  .catch(err => console.error('❌ PostgreSQL connection failed:', err));
 
-poolConnect
-  .then(() => console.log('✅ Connected to SQL Server'))
-  .catch(err => console.error('❌ SQL Server connection failed:', err));
-
-// Get all cards
+// ------------------------
+// 📌 GET all cards
+// ------------------------
 app.get('/api/cards', async (req, res) => {
   try {
-    await poolConnect;
-    const result = await pool.request().query('SELECT * FROM card');
-    res.status(200).json(result.recordset);
+    const result = await pool.query('SELECT * FROM card ORDER BY id');
+    res.status(200).json(result.rows);
   } catch (err) {
     console.error('Error fetching cards:', err);
     res.status(500).json({ error: 'Failed to fetch cards' });
   }
 });
 
-// Update card status and priority
+// ------------------------
+// 🔁 PUT Update card status/priority
+// ------------------------
 app.put('/api/v1/cards/:cardId', async (req, res) => {
   const { cardId } = req.params;
   const { newStatus, newPriority, oldStatus, oldPriority } = req.body;
@@ -52,42 +54,40 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  const client = await pool.connect();
   try {
-    await poolConnect;
-    const request = pool.request();
+    await client.query('BEGIN');
 
-    await request
-      .input('cardId', mssql.Int, cardId)
-      .input('newStatus', mssql.NVarChar, newStatus)
-      .input('newPriority', mssql.Int, newPriority)
-      .query(`
-        UPDATE card
-        SET status = @newStatus, priority = @newPriority
-        WHERE id = @cardId
-      `);
+    // Update card
+    await client.query(
+      `UPDATE card SET status = $1, priority = $2 WHERE id = $3`,
+      [newStatus, newPriority, cardId]
+    );
 
-    await pool.request()
-      .input('cardId', mssql.Int, cardId)
-      .input('oldStatus', mssql.NVarChar, oldStatus)
-      .input('newStatusHistory', mssql.NVarChar, newStatus)
-      .input('oldPriority', mssql.Int, oldPriority)
-      .input('newPriority', mssql.Int, newPriority)
-      .input('timestamp', mssql.BigInt, Math.floor(Date.now() / 1000))
-      .query(`
-        INSERT INTO card_change_history (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
-        VALUES (@cardId, @oldStatus, @newStatusHistory, @oldPriority, @newPriority, @timestamp)
-      `);
+    // Insert into change history
+    await client.query(
+      `INSERT INTO card_change_history (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [cardId, oldStatus, newStatus, oldPriority, newPriority, Math.floor(Date.now() / 1000)]
+    );
 
-    const result = await pool.request().query('SELECT * FROM card');
-    res.status(200).json(result.recordset);
+    // Fetch updated cards
+    const result = await client.query('SELECT * FROM card ORDER BY id');
+    await client.query('COMMIT');
 
+    res.status(200).json(result.rows);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error updating card:', err);
     res.status(500).json({ error: 'Failed to update card' });
+  } finally {
+    client.release();
   }
 });
 
-// Verify PIN only (no user ID required)
+// ------------------------
+// 🔐 POST Verify user PIN
+// ------------------------
 app.post('/api/verify-pin', async (req, res) => {
   const { pin } = req.body;
 
@@ -96,15 +96,15 @@ app.post('/api/verify-pin', async (req, res) => {
   }
 
   try {
-    await poolConnect;
-    const result = await pool.request()
-      .input('pin', mssql.VarChar, String(pin).trim())
-      .query('SELECT id FROM users WHERE pin = @pin');
+    const result = await pool.query(
+      'SELECT id FROM users WHERE pin = $1',
+      [String(pin).trim()]
+    );
 
-    if (result.recordset.length === 1) {
-      const user = result.recordset[0];
+    if (result.rows.length === 1) {
+      const user = result.rows[0];
       res.status(200).json({ valid: true, userId: user.id });
-    } else if (result.recordset.length > 1) {
+    } else if (result.rows.length > 1) {
       res.status(401).json({ valid: false, error: 'PIN is not unique. Contact admin.' });
     } else {
       res.status(401).json({ valid: false, error: 'Invalid PIN' });
@@ -116,8 +116,9 @@ app.post('/api/verify-pin', async (req, res) => {
   }
 });
 
+// ------------------------
+// 🚀 Start server
+// ------------------------
 app.listen(port, () => {
   console.log(`🚀 Server running on http://localhost:${port}`);
 });
-
-
