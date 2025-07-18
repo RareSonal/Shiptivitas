@@ -316,10 +316,16 @@ jobs:
           echo "✅ RDS is available"
 
       - name: 📥 Download latest SQL seed file
+        working-directory: backend
         run: |
-         echo "🔄 Downloading latest shiptivitas_postgres.sql"
-         curl -L -o backend/shiptivitas_postgres.sql \
-         https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+          echo "🔄 Downloading latest shiptivitas_postgres.sql"
+          curl -L -o shiptivitas_postgres.sql \
+          https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+
+      - name: ✅ Verify SQL file downloaded
+        working-directory: backend
+        run: |
+          ls -l shiptivitas_postgres.sql
 
       - name: 💾 Install dependencies for seed script
         working-directory: backend
