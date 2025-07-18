@@ -253,17 +253,37 @@ jobs:
       # Backend Docker build, deploy, DB download & seed/verify
       # -------------------------------------------------------
 
+      - name: 📦 Check for backend changes
+        id: backend_changes
+        run: |
+          if git diff --quiet HEAD^ HEAD -- ./backend; then
+            echo "CHANGED=false" >> $GITHUB_ENV
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGED=true" >> $GITHUB_ENV
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: 🔧 Set lowercase repo owner
         id: vars
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
       - name: 🔧 Build & push backend Docker image
+        if: steps.backend_changes.outputs.changed == 'true'
         uses: docker/build-push-action@v3
         with:
           context: ./backend
           file: ./backend/dockerfile.server
           push: true
-          tags: ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: ⏭️ Skip Docker build (no backend changes)
+        if: steps.backend_changes.outputs.changed == 'false'
+        run: echo "✅ No backend changes detected. Skipping Docker build."
+
 
       - name: 🌐 Wait for RDS availability
         run: |
@@ -336,7 +356,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            docker pull ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
+            docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
             docker stop shiptivitas-backend || true
             docker rm shiptivitas-backend || true
             docker run -d \
@@ -346,4 +366,4 @@ jobs:
               -e DB_NAME=${{ secrets.DB_NAME }} \
               -e DB_USER=${{ secrets.DB_USER }} \
               -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
+              ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
