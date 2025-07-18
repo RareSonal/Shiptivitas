@@ -329,7 +329,7 @@ jobs:
 
       - name: 💾 Install dependencies for seed script
         working-directory: backend
-        run: npm ci
+        run: npm install
 
       - name: 🌱 Seed PostgreSQL DB via Node.js
         working-directory: backend
