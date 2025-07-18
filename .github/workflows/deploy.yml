@@ -261,6 +261,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: ./backend
+          file: ./backend/dockerfile.server
           push: true
           tags: ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
 
