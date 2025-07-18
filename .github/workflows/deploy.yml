@@ -318,7 +318,7 @@ jobs:
       - name: 📥 Download latest SQL seed file
         run: |
          echo "🔄 Downloading latest shiptivitas_postgres.sql"
-         curl -L -o database/shiptivitas_postgres.sql \
+         curl -L -o backend/shiptivitas_postgres.sql \
          https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
 
       - name: 💾 Install dependencies for seed script
