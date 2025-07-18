@@ -9,7 +9,7 @@ dotenv.config();
 const { Client } = pkg;
 
 const ACTION = process.argv[3];
-const REQUIRED_TABLES = ['users', 'card', 'card_change_history, 'login_history'];
+const REQUIRED_TABLES = ['users', 'card', 'card_change_history', 'login_history'];
 const SQL_FILE = process.env.SQL_FILE || 'shiptivitas_postgres.sql';
 
 const DB_CONFIG = {
@@ -59,10 +59,15 @@ const run = async () => {
           INSERT INTO seed_metadata (key, value)
           VALUES ('db_seeded', 'true')
           ON CONFLICT (key) DO NOTHING;
-        `);
-        console.log(JSON.stringify({ message: '✅ Tables exist. Skipping seed, marked seeded.' }));
-        return;
-      }
+          `);
+
+        console.log(JSON.stringify({
+          message: '✅ All required tables already exist. Skipping seed and marking as seeded.',
+          checked_tables: REQUIRED_TABLES
+          }, null, 2));
+          return;
+        }
+
 
       // Seed DB from SQL file
       const sql = fs.readFileSync(path.resolve(SQL_FILE), 'utf8');
