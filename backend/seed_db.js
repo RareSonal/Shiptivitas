@@ -9,7 +9,7 @@ dotenv.config();
 const { Client } = pkg;
 
 const ACTION = process.argv[3];
-const REQUIRED_TABLES = ['users', 'card', 'card_change_history, 'login_history''];
+const REQUIRED_TABLES = ['users', 'card', 'card_change_history, 'login_history'];
 const SQL_FILE = process.env.SQL_FILE || 'shiptivitas_postgres.sql';
 
 const DB_CONFIG = {
