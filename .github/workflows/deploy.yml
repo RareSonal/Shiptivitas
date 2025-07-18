@@ -252,13 +252,17 @@ jobs:
       # -------------------------------------------------------
       # Backend Docker build, deploy, DB download & seed/verify
       # -------------------------------------------------------
-      
+
+      - name: 🔧 Set lowercase repo owner
+        id: vars
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
       - name: 🔧 Build & push backend Docker image
         uses: docker/build-push-action@v3
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/shiptivitas-backend:latest
+          tags: ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
 
       - name: 🌐 Wait for RDS availability
         run: |
