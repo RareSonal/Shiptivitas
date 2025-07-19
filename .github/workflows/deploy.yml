@@ -294,14 +294,27 @@ jobs:
         run: echo "✅ No backend changes detected. Skipping Docker build."
 
       ######################################################
-      # Database creation and seeding
+      # 🔁 Fetch EC2 Public IP (Used by All Later Steps)
       ######################################################
 
-      - name: 🔧 Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: 🧪 Fetch EC2 public IP
+        id: ec2_info
+        run: |
+          set -e
+          IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=Shiptivitas-API" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+            echo "EC2_IP=$IP" >> $GITHUB_ENV
+            echo "ip=$IP" >> $GITHUB_OUTPUT
+
+      ######################################################
+      # Database Seeding & Verification via Docker on EC2
+      ######################################################
 
       - name: 🔐 Fetch DB credentials from SSM
         run: |
+          set -e
           echo "🔐 Fetching DB credentials from SSM..."
           DB_USER=$(aws ssm get-parameter \
             --name "${{ secrets.DB_USERNAME_SSM_PATH }}" \
@@ -320,104 +333,103 @@ jobs:
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
 
-      - name: 🌐 Wait for RDS availability
-        run: |
-          echo "⏳ Waiting for RDS to become available..."
-          for i in {1..30}; do
-            STATUS=$(aws rds describe-db-instances \
-              --db-instance-identifier ${{ secrets.DB_INSTANCE_IDENTIFIER }} \
-              --region ${{ secrets.AWS_REGION }} \
-              --query "DBInstances[0].DBInstanceStatus" \
-              --output text)
-            echo "🔎 Status: $STATUS"
-            if [ "$STATUS" == "available" ]; then break; fi
-            sleep 10
-          done
-          [ "$STATUS" = "available" ] || (echo "❌ RDS not ready" && exit 1)
-          echo "✅ RDS is available"
-
-      - name: 🏗️ Create Shiptivitas database if not exists
-        run: |
-          export PGPASSWORD=$DB_PASSWORD
-          echo "🔍 Checking if '${{ env.DB_NAME }}' DB exists..."
-          EXISTS=$(psql -h ${{ env.DB_HOST }} -U $DB_USER -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '${{ env.DB_NAME }}'")
-          if [ "$EXISTS" = "1" ]; then
-            echo "✅ Database '${{ env.DB_NAME }}' already exists"
-          else
-            echo "🆕 Creating database '${{ env.DB_NAME }}'..."
-            psql -h ${{ env.DB_HOST }} -U $DB_USER -d postgres -c "CREATE DATABASE ${{ env.DB_NAME }};"
-          fi
-
       - name: 📥 Download latest SQL seed file
         working-directory: backend
         run: |
           curl -L -o shiptivitas_postgres.sql \
           https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
 
-      - name: ✅ Verify SQL file
-        working-directory: backend
-        run: ls -l shiptivitas_postgres.sql
-
-      - name: 💾 Install Node.js and backend deps
-        uses: actions/setup-node@v3
+      - name: 📤 Copy seed script & SQL to EC2
+        uses: appleboy/scp-action@v0.1.5
         with:
-          node-version: 18
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: backend/shiptivitas_postgres.sql
+          target: /home/ec2-user/
 
-      - name: 📦 Install backend dependencies
-        working-directory: backend
-        run: npm install
+      - name: 🛠️ Seed PostgreSQL DB via Docker on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
+          script: |
+            set -e
+            echo "📦 Creating Dockerfile for DB Seeder..."
+            cat <<EOF > Dockerfile.seed
+            FROM node:18
+            WORKDIR /app
+            COPY seed_db.js .
+            COPY shiptivitas_postgres.sql .
+            RUN npm install pg dotenv
+            CMD ["node", "seed_db.js", "", "seed"]
+            EOF
 
-      - name: 🌱 Seed PostgreSQL DB via Node.js
-        working-directory: backend
-        env:
-          DB_NAME: ${{ env.DB_NAME }}
-          DB_USER: ${{ env.DB_USER }}
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
-          DB_HOST: ${{ env.DB_HOST }}
-          SQL_FILE_PATH: ./shiptivitas_postgres.sql
-        run: |
-          node seed_db.js seed
+            echo "🐳 Building and running DB Seeder container..."
+            docker build -f Dockerfile.seed -t db-seeder .
+            docker run --rm \
+            -e DB_USER=$DB_USER \
+            -e DB_PASSWORD=$DB_PASSWORD \
+            -e DB_NAME=$DB_NAME \
+            -e DB_HOST=$DB_HOST \
+            -e SQL_FILE=shiptivitas_postgres.sql \
+            db-seeder
 
-      - name: 🕵️ Verify DB tables & data
-        working-directory: backend
-        env:
-          DB_NAME: ${{ env.DB_NAME }}
-          DB_USER: ${{ env.DB_USER }}
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
-          DB_HOST: ${{ env.DB_HOST }}
-          SQL_FILE_PATH: ./shiptivitas_postgres.sql
-        run: |
-          node seed_db.js verify
-          
-      # -------------------------------------------------------
-      # Deploy backend Docker image to EC2
-      # -------------------------------------------------------
-      
-      - name: 🧪 Fetch EC2 public IP
-        id: ec2_info
-        run: |
-          IP=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=Shiptivitas-API" \
-            --query "Reservations[0].Instances[0].PublicIpAddress" \
-            --output text)
-          echo "EC2_IP=$IP" >> $GITHUB_ENV
+      - name: 🕵️ Verify DB tables & data via Docker on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
+          script: |
+            set -e
+            echo "📦 Creating Dockerfile for DB Verifier..."
+            cat <<EOF > Dockerfile.verify
+            FROM node:18
+            WORKDIR /app
+            COPY seed_db.js .
+            COPY shiptivitas_postgres.sql .
+            RUN npm install pg dotenv
+            CMD ["node", "seed_db.js", "", "verify"]
+            EOF
+
+            echo "🐳 Building and running DB Verifier container..."
+            docker build -f Dockerfile.verify -t db-verifier .
+            docker run --rm \
+              -e DB_USER=$DB_USER \
+              -e DB_PASSWORD=$DB_PASSWORD \
+              -e DB_NAME=$DB_NAME \
+              -e DB_HOST=$DB_HOST \
+              -e SQL_FILE=shiptivitas_postgres.sql \
+              db-verifier
+
+            echo "🧹 Cleaning up..."
+            rm -f Dockerfile.seed Dockerfile.verify seed_db.js shiptivitas_postgres.sql
+
+      ######################################################
+      # 🚀 Deploy Backend Docker Image to EC2
+      ######################################################
 
       - name: 🚢 Deploy backend on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ env.EC2_IP }}
+          host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: DB_USER,DB_PASSWORD
           script: |
+            set -e
             docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
             docker stop shiptivitas-backend || true
             docker rm shiptivitas-backend || true
             docker run -d \
-              --name shiptivitas-backend \
-              -p 3001:3001 \
-              -e DB_HOST=${{ secrets.DB_HOST }} \
-              -e DB_NAME=${{ secrets.DB_NAME }} \
-              -e DB_USER=$DB_USER \
-              -e DB_PASSWORD=$DB_PASSWORD \
-              ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+            --name shiptivitas-backend \
+            -p 3001:3001 \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e DB_USER=$DB_USER \
+            -e DB_PASSWORD=$DB_PASSWORD \
+            ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
