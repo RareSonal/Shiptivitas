@@ -338,6 +338,8 @@ jobs:
         run: |
           curl -L -o shiptivitas_postgres.sql \
           https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+          curl -L -o seed_db.js \
+          https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
 
       - name: 📤 Copy seed script & SQL to EC2
         uses: appleboy/scp-action@v0.1.5
