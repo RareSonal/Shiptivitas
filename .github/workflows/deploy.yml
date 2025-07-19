@@ -345,7 +345,9 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: backend/shiptivitas_postgres.sql
+          source: |
+            backend/seed_db.js
+            backend/shiptivitas_postgres.sql
           target: /home/ec2-user/
 
       - name: 🛠️ Seed PostgreSQL DB via Docker on EC2
