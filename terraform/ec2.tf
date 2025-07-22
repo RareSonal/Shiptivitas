@@ -25,7 +25,7 @@ data "aws_ami" "amazon_linux" {
 }
 
 # Optional: AWS account info
-data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "ec2_identity" {}
 
 # IAM role to allow EC2 to use SSM and optionally access secrets
 resource "aws_iam_role" "ec2_ssm_role" {
