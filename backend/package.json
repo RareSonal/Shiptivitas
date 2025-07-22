@@ -1,20 +1,22 @@
 {
-  "name": "shiptivity-api",
+  "name": "shiptivitas",
   "version": "1.0.0",
-  "type": "module",
-  "description": "The Backend of Shiptivity",
-  "main": "index.js",
+  "description": "The backend for Shiptivitas, running on Express with PostgreSQL",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "babel server.js --out-dir build",
-    "start": "babel-watch server.js"
+    "start": "node server.js",
+    "seed": "node seed_db.js seed",
+    "verify": "node seed_db.js verify"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/insidesherpa/shiptivity-2.git"
+    "url": "https://github.com/insidesherpa/shiptivity-2.git"
   },
   "keywords": [
-    "shiptivity"
+    "shiptivity",
+    "express",
+    "postgres",
+    "api"
   ],
   "author": "juliusarden",
   "license": "MIT",
@@ -23,18 +25,9 @@
   },
   "homepage": "https://github.com/insidesherpa/shiptivity-2#readme",
   "dependencies": {
-    "better-sqlite3": "^11.9.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
-    "express": "^4.16.4",
-    "mssql": "^11.0.1"
-  },
-  "devDependencies": {
-    "@babel/cli": "^7.0.0",
-    "@babel/core": "^7.0.0",
-    "@babel/preset-env": "^7.3.1",
-    "babel-cli": "^6.26.0",
-    "babel-preset-env": "^0.0.0",
-    "babel-watch": "^7.8.1"
+    "express": "^4.18.2",
+    "pg": "^8.11.3"
   }
 }
