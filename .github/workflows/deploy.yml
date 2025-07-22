@@ -1,0 +1,539 @@
+
+# -----------------------------------------
+# 🚀 Deploy Shiptivitas Infrastructure
+# -----------------------------------------
+name: Deploy Shiptivitas Infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    name: 🚀 Deploy AWS Resources with Terraform
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: 🧾 Checkout Code
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: 🔐 Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: ⚙️ Terraform Init (Azure Backend)
+        run: terraform init
+
+      # -----------------------------
+      # Resource Existence Checks
+      # -----------------------------
+      
+      - name: 🔍 Check if S3 Bucket Exists
+        run: |
+          if aws s3api head-bucket --bucket shiptivitas-frontend-bucket 2>/dev/null; then
+            echo "CREATE_S3_BUCKET=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_S3_BUCKET=true" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if IAM Role Exists
+        run: |
+          if aws iam get-role --role-name shiptivitas-ec2-ssm-role 2>/dev/null; then
+            echo "CREATE_IAM_ROLE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_IAM_ROLE=true" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if IAM Instance Profile Exists
+        run: |
+          if aws iam get-instance-profile --instance-profile-name shiptivitas-ec2-ssm-profile 2>/dev/null; then
+            echo "CREATE_IAM_PROFILE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_IAM_PROFILE=true" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if CloudFront OAC Exists
+        run: |
+          OAC_ID=$(aws cloudfront list-origin-access-controls \
+            --query "OriginAccessControlList.Items[?Name=='shiptivitas-oac'].Id" \
+            --output text)
+          if [ -z "$OAC_ID" ]; then
+            echo "CREATE_OAC=true" >> $GITHUB_ENV
+            echo "EXISTING_OAC_ID=" >> $GITHUB_ENV
+          else
+            echo "CREATE_OAC=false" >> $GITHUB_ENV
+            echo "EXISTING_OAC_ID=$OAC_ID" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if EC2 Instance Exists
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=Shiptivitas-API" \
+            --query "Reservations[*].Instances[*].InstanceId" \
+            --output text)
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "CREATE_EC2=true" >> $GITHUB_ENV
+          else
+            echo "CREATE_EC2=false" >> $GITHUB_ENV
+          fi
+          
+      - name: 🔍 Check if CloudFront Distribution Exists by Tag
+        run: |
+          echo "🔎 Looking for CloudFront distribution tagged Name=shiptivitas-cdn..."
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ALL_DIST_IDS=$(aws cloudfront list-distributions --query "DistributionList.Items[*].Id" --output text)
+          DIST_ID=""
+            for ID in $ALL_DIST_IDS; do
+              ARN="arn:aws:cloudfront::${ACCOUNT_ID}:distribution/$ID"
+              echo "Inspecting ARN: $ARN"
+              TAG_NAME=$(aws cloudfront list-tags-for-resource \
+                --resource "$ARN" \
+                --query "Tags.Items[?Key=='Name'].Value | [0]" \
+                --output text 2>/dev/null || true)
+              echo "🔖 Tag for $ID: '${TAG_NAME}'"
+              if [ ! -z "$TAG_NAME" ] && [ "$TAG_NAME" = "shiptivitas-cdn" ]; then
+                DIST_ID=$ID
+                break
+              fi
+            done
+            if [ -z "$DIST_ID" ]; then
+              echo "No existing CloudFront distribution found."
+              echo "USE_EXISTING_CDN=false" >> $GITHUB_ENV
+              echo "CLOUDFRONT_DISTRIBUTION_ID=" >> $GITHUB_ENV
+            else
+              echo "Found existing CloudFront distribution: $DIST_ID"
+              echo "USE_EXISTING_CDN=true" >> $GITHUB_ENV
+              echo "CLOUDFRONT_DISTRIBUTION_ID=$DIST_ID" >> $GITHUB_ENV
+            fi
+            
+      - name: 🧮 Ensure Boolean Fallbacks
+        run: |
+          echo "USE_EXISTING_CDN=${USE_EXISTING_CDN:-false}" >> $GITHUB_ENV
+          echo "CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID:-}" >> $GITHUB_ENV
+          echo "CREATE_CLOUD_FRONT_POLICY=${CREATE_CLOUD_FRONT_POLICY:-false}" >> $GITHUB_ENV
+          echo "CREATE_GITHUB_ROLE=${CREATE_GITHUB_ROLE:-false}" >> $GITHUB_ENV
+          
+      # -----------------------------
+      # Check if GitHub IAM Role Exists
+      # -----------------------------
+      
+      - name: 🔍 Check if GitHub IAM Role Exists
+        run: |
+          if aws iam get-role --role-name github-actions-shiptivitas-role 2>/dev/null; then
+            echo "CREATE_GITHUB_ROLE=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_GITHUB_ROLE=true" >> $GITHUB_ENV
+          fi
+          
+      # -----------------------------
+      # Check if GitHub IAM Policy Exists
+      # -----------------------------
+      
+      - name: 🔍 Check if GitHub IAM Policy Exists
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          if aws iam get-policy --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/GitHubActions-CloudFrontTagRead 2>/dev/null; then
+            echo "CREATE_CLOUD_FRONT_POLICY=false" >> $GITHUB_ENV
+          else
+            echo "CREATE_CLOUD_FRONT_POLICY=true" >> $GITHUB_ENV
+          fi
+          
+      # -----------------------------
+      # Prepare Variables
+      # -----------------------------
+      
+      - name: 🧼 Sanitize Secrets
+        run: |
+          echo "db_instance_identifier=${{ secrets.DB_INSTANCE_IDENTIFIER }}" >> $GITHUB_ENV
+          echo "db_username_ssm_path=${{ secrets.DB_USERNAME_SSM_PATH }}" >> $GITHUB_ENV
+          echo "db_password_ssm_path=${{ secrets.DB_PASSWORD_SSM_PATH }}" >> $GITHUB_ENV
+          echo "public_subnet_id=${{ secrets.AWS_PUBLIC_SUBNET_ID }}" >> $GITHUB_ENV
+          echo "security_group_id=${{ secrets.AWS_SECURITY_GROUP_ID }}" >> $GITHUB_ENV
+          
+      # ----------------------------- 
+      # Terraform Plan
+      # -----------------------------
+      
+      - name: 📋 Terraform Plan and Save Output
+        id: tf_plan
+        run: |
+          terraform plan \
+            -var="key_name=${{ secrets.AWS_KEY_PAIR_NAME }}" \
+            -var="db_instance_identifier=${{ env.db_instance_identifier }}" \
+            -var="db_username_ssm_path=${{ env.db_username_ssm_path }}" \
+            -var="db_password_ssm_path=${{ env.db_password_ssm_path }}" \
+            -var="vpc_id=${{ secrets.VPC_ID }}" \
+            -var="public_subnet_id=${{ env.public_subnet_id }}" \
+            -var="security_group_id=${{ env.security_group_id }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="create_s3_bucket=${{ env.CREATE_S3_BUCKET }}" \
+            -var="create_iam_role=${{ env.CREATE_IAM_ROLE }}" \
+            -var="create_iam_profile=${{ env.CREATE_IAM_PROFILE }}" \
+            -var="create_oac=${{ env.CREATE_OAC }}" \
+            -var="existing_oac_id=${{ env.EXISTING_OAC_ID }}" \
+            -var="create_ec2=${{ env.CREATE_EC2 }}" \
+            -var="create_cdn=true" \
+            -var="use_existing_cdn=${{ env.USE_EXISTING_CDN }}" \
+            -var="cloudfront_distribution_id=${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            -var="cloudfront_oac_id=${{ env.CLOUDFRONT_OAC_ID }}" \
+            -var="create_github_actions_role=${{ env.CREATE_GITHUB_ROLE }}" \
+            -var="create_cloudfront_tag_read_policy=${{ env.CREATE_CLOUD_FRONT_POLICY }}" \
+            -var="create_security_rule=false" \
+            -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+          if grep -q "No changes." plan.txt; then
+            echo "NO_CHANGES=true" >> $GITHUB_ENV
+          else
+            echo "NO_CHANGES=false" >> $GITHUB_ENV
+          fi
+          
+      # -----------------------------
+      # Terraform Apply
+      # -----------------------------
+      
+      - name: 🚀 Terraform Apply (If Changes)
+        if: env.NO_CHANGES == 'false'
+        run: terraform apply -auto-approve tfplan
+
+      - name: ⏭️ Skip Apply (No Changes Detected)
+        if: env.NO_CHANGES == 'true'
+        run: echo "No infrastructure changes detected. Skipping apply."
+
+      # -----------------------------
+      # Frontend Build & Deploy
+      # -----------------------------
+      
+      - name: 🛠️ Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 🚧 Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          
+      - name: 📂 List build directory
+        working-directory: frontend
+        run: ls -la build
+
+      - name: 📤 Upload Frontend to S3
+        working-directory: frontend
+        run: |
+          aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
+          
+      # -------------------------------------------------------
+      # Backend Docker build, deploy, DB download & seed/verify
+      # -------------------------------------------------------
+
+      - name: 📦 Check for backend changes
+        id: backend_changes
+        run: |
+          if git diff --quiet HEAD^ HEAD -- ./backend; then
+            echo "CHANGED=false" >> $GITHUB_ENV
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGED=true" >> $GITHUB_ENV
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: 🔧 Set lowercase repo owner
+        id: vars
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      - name: 🔐 Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🧰 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔧 Build & push backend Docker image
+        if: steps.backend_changes.outputs.changed == 'true'
+        uses: docker/build-push-action@v3
+        with:
+          context: ./backend
+          file: ./backend/dockerfile.server
+          push: true
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: ⏭️ Skip Docker build (no backend changes)
+        if: steps.backend_changes.outputs.changed == 'false'
+        run: echo "No backend changes detected. Skipping Docker build."
+
+      ######################################################
+      # Use Terraform output to get EC2 IP reliably
+      ######################################################
+
+      - name: 📥 Get EC2 Public IP from Terraform
+        id: ec2_info
+        run: |
+          set -e
+          echo "Fetching EC2 public IP from Terraform output..."
+          IP=$(terraform -chdir=terraform output -raw backend_ec2_public_ip)
+            if [ -z "$IP" ]; then
+              echo "EC2 IP not found. Check if Terraform applied properly."
+              exit 1
+            fi
+            echo "EC2 IP = $IP"
+            echo "EC2_IP=$IP" >> $GITHUB_ENV
+            echo "ip=$IP" >> $GITHUB_OUTPUT
+
+      ######################################################
+      # 🔐 Fetch DB credentials from SSM
+      ######################################################
+
+      - name: 🔐 Fetch DB credentials from SSM
+        run: |
+          set -e
+          echo "Fetching DB credentials from SSM..."
+
+          DB_USER=$(aws ssm get-parameter \
+            --name "${{ secrets.DB_USERNAME_SSM_PATH }}" \
+            --with-decryption \
+            --region $AWS_REGION \
+            --query 'Parameter.Value' \
+            --output text)
+
+          DB_PASSWORD=$(aws ssm get-parameter \
+            --name "${{ secrets.DB_PASSWORD_SSM_PATH }}" \
+            --with-decryption \
+            --region $AWS_REGION \
+            --query 'Parameter.Value' \
+            --output text)
+
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+
+      - name: ♻️ Export DB envs as outputs
+        id: export_envs
+        run: |
+          echo "DB_USER=${{ env.DB_USER }}"
+          echo "DB_PASSWORD=${{ env.DB_PASSWORD }}"
+          echo "DB_NAME=${{ env.DB_NAME }}"
+          echo "db_user=${{ env.DB_USER }}" >> $GITHUB_OUTPUT
+          echo "db_password=${{ env.DB_PASSWORD }}" >> $GITHUB_OUTPUT
+          echo "db_name=${{ env.DB_NAME }}" >> $GITHUB_OUTPUT
+
+      ######################################################
+      # Launch PostgreSQL on EC2 via SSH
+      ######################################################
+
+      - name: 🏗️ Launch PostgreSQL Docker on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "Inside EC2 via SSH"
+            echo "DB_HOST=${DB_HOST:-not set}"
+            echo "DB_USER=${DB_USER:-not set}"
+            echo "DB_PASSWORD=${DB_PASSWORD:-not set}"
+            env | grep DB
+
+            echo "Creating Docker network..."
+            docker network create pgnet || true
+
+            echo "Removing any old pgdb container..."
+            docker rm -f pgdb || true
+
+            echo "Launching PostgreSQL container..."
+            docker run -d \
+              --name pgdb \
+              --network pgnet \
+              -e POSTGRES_USER="$DB_USER" \
+              -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+              postgres:14
+
+            echo "Hostname test:"
+            ping -c 1 "$DB_HOST" || echo "Could not resolve $DB_HOST"
+
+            echo "Waiting for PostgreSQL to initialize..."
+            sleep 10
+        env:
+            DB_USER: ${{ env.DB_USER }}
+            DB_PASSWORD: ${{ env.DB_PASSWORD }}
+
+      - name: 🏗️ Ensure Database Exists
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "DEBUG: DB_HOST=$DB_HOST"
+            echo "DEBUG: DB_USER=$DB_USER"
+            echo "DEBUG: DB_PASSWORD=$DB_PASSWORD"
+            echo "DEBUG: DB_NAME=$DB_NAME"
+            echo "Checking if DB '$DB_NAME' exists..."
+            docker run --rm \
+              --network pgnet \
+              -e PGPASSWORD="$DB_PASSWORD" \
+              postgres:14 \
+              psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" \
+              | grep -q 1 || \
+              docker run --rm \
+                --network pgnet \
+                -e PGPASSWORD="$DB_PASSWORD" \
+                postgres:14 \
+                psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
+                -c "CREATE DATABASE \"$DB_NAME\";"
+              echo "Ensured DB '$DB_NAME' exists."
+        env:
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
+        
+      - name: 🛠️ Seed PostgreSQL DB via Docker
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "DEBUG: DB_HOST=$DB_HOST"
+            echo "DEBUG: DB_USER=$DB_USER"
+            echo "DEBUG: DB_NAME=$DB_NAME"
+            echo "Downloading seed files..."
+            curl -L -o seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
+            curl -L -o shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+            echo "Creating Dockerfile for DB Seeder..."
+            cat <<EOF > Dockerfile.seed
+            FROM node:18
+            WORKDIR /app
+            COPY seed_db.js .
+            COPY shiptivitas_postgres.sql .
+            RUN npm install pg dotenv
+            CMD ["node", "seed_db.js", "", "seed"]
+            EOF
+            echo "Building and running DB Seeder container..."
+            docker build -f Dockerfile.seed -t db-seeder .
+            docker run --rm \
+              --network pgnet \
+              -e DB_USER="$DB_USER" \
+              -e DB_PASSWORD="$DB_PASSWORD" \
+              -e DB_NAME="$DB_NAME" \
+              -e DB_HOST="$DB_HOST" \
+              -e SQL_FILE=shiptivitas_postgres.sql \
+              db-seeder
+        env:
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
+              
+      - name: 🕵️ Verify DB tables & data via Docker
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "DEBUG: DB_HOST=$DB_HOST"
+            echo "DEBUG: DB_NAME=$DB_NAME"
+            echo "Creating Dockerfile for DB Verifier..."
+            cat <<EOF > Dockerfile.verify
+            FROM node:18
+            WORKDIR /app
+            COPY seed_db.js .
+            COPY shiptivitas_postgres.sql .
+            RUN npm install pg dotenv
+            CMD ["node", "seed_db.js", "", "verify"]
+            EOF
+            echo "Building and running DB Verifier container..."
+            docker build -f Dockerfile.verify -t db-verifier .
+            docker run --rm \
+              --network pgnet \
+              -e DB_USER="$DB_USER" \
+              -e DB_PASSWORD="$DB_PASSWORD" \
+              -e DB_NAME="$DB_NAME" \
+              -e DB_HOST="$DB_HOST" \
+              -e SQL_FILE=shiptivitas_postgres.sql \
+              db-verifier
+        env:
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
+              
+      ######################################################
+      # 🚀 Deploy Backend Docker Image to EC2
+      ######################################################
+
+      - name: 🚢 Deploy backend on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD,DB_NAME
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "DEBUG: DB_HOST=$DB_HOST"
+            echo "DEBUG: DB_NAME=$DB_NAME"
+            echo "DEBUG: DB_USER=$DB_USER"
+            echo "Pulling latest backend image..."
+            docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+            echo "Stopping old container if exists..."
+            docker stop shiptivitas-backend || true
+            docker rm shiptivitas-backend || true
+            echo "Launching backend container..."
+            docker run -d \
+              --name shiptivitas-backend \
+              -p 3001:3001 \
+              --network pgnet \
+              -e DB_HOST="$DB_HOST" \
+              -e DB_NAME="$DB_NAME" \
+              -e DB_USER="$DB_USER" \
+              -e DB_PASSWORD="$DB_PASSWORD" \
+              ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+        env:
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
