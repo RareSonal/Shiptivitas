@@ -89,7 +89,7 @@ variable "cloudfront_oac_id" {
 variable "create_ec2" {
   description = "Whether to create the EC2 instance"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "create_github_actions_role" {
