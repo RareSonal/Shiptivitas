@@ -1,4 +1,3 @@
-
 # -----------------------------------------
 # 🚀 Deploy Shiptivitas Infrastructure
 # -----------------------------------------
@@ -110,7 +109,7 @@ jobs:
           DIST_ID=""
             for ID in $ALL_DIST_IDS; do
               ARN="arn:aws:cloudfront::${ACCOUNT_ID}:distribution/$ID"
-              echo "Inspecting ARN: $ARN"
+              echo "✅ Inspecting ARN: $ARN"
               TAG_NAME=$(aws cloudfront list-tags-for-resource \
                 --resource "$ARN" \
                 --query "Tags.Items[?Key=='Name'].Value | [0]" \
@@ -122,11 +121,11 @@ jobs:
               fi
             done
             if [ -z "$DIST_ID" ]; then
-              echo "No existing CloudFront distribution found."
+              echo "✅ No existing CloudFront distribution found."
               echo "USE_EXISTING_CDN=false" >> $GITHUB_ENV
               echo "CLOUDFRONT_DISTRIBUTION_ID=" >> $GITHUB_ENV
             else
-              echo "Found existing CloudFront distribution: $DIST_ID"
+              echo "✅ Found existing CloudFront distribution: $DIST_ID"
               echo "USE_EXISTING_CDN=true" >> $GITHUB_ENV
               echo "CLOUDFRONT_DISTRIBUTION_ID=$DIST_ID" >> $GITHUB_ENV
             fi
@@ -222,7 +221,7 @@ jobs:
 
       - name: ⏭️ Skip Apply (No Changes Detected)
         if: env.NO_CHANGES == 'true'
-        run: echo "No infrastructure changes detected. Skipping apply."
+        run: echo "✅ No infrastructure changes detected. Skipping apply."
 
       # -----------------------------
       # Frontend Build & Deploy
@@ -247,7 +246,7 @@ jobs:
         working-directory: frontend
         run: |
           aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
-          
+
       # -------------------------------------------------------
       # Backend Docker build, deploy, DB download & seed/verify
       # -------------------------------------------------------
@@ -262,7 +261,7 @@ jobs:
             echo "CHANGED=true" >> $GITHUB_ENV
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: 🔧 Set lowercase repo owner
         id: vars
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
@@ -291,7 +290,7 @@ jobs:
 
       - name: ⏭️ Skip Docker build (no backend changes)
         if: steps.backend_changes.outputs.changed == 'false'
-        run: echo "No backend changes detected. Skipping Docker build."
+        run: echo "✅ No backend changes detected. Skipping Docker build."
 
       ######################################################
       # Use Terraform output to get EC2 IP reliably
@@ -304,15 +303,15 @@ jobs:
           echo "Fetching EC2 public IP from Terraform output..."
           IP=$(terraform -chdir=terraform output -raw backend_ec2_public_ip)
             if [ -z "$IP" ]; then
-              echo "EC2 IP not found. Check if Terraform applied properly."
+              echo "❌ EC2 IP not found. Check if Terraform applied properly."
               exit 1
             fi
-            echo "EC2 IP = $IP"
+            echo "✅ EC2 IP = $IP"
             echo "EC2_IP=$IP" >> $GITHUB_ENV
             echo "ip=$IP" >> $GITHUB_OUTPUT
 
       ######################################################
-      # 🔐 Fetch DB credentials from SSM
+      # Fetch DB credentials from SSM
       ######################################################
 
       - name: 🔐 Fetch DB credentials from SSM
@@ -362,19 +361,19 @@ jobs:
           script: |
             set -e
             export DB_HOST=pgdb
-            echo "Inside EC2 via SSH"
-            echo "DB_HOST=${DB_HOST:-not set}"
-            echo "DB_USER=${DB_USER:-not set}"
-            echo "DB_PASSWORD=${DB_PASSWORD:-not set}"
+            echo "✅ Inside EC2 via SSH"
+            echo "✅ DB_HOST=${DB_HOST:-not set}"
+            echo "✅ DB_USER=${DB_USER:-not set}"
+            echo "✅ DB_PASSWORD=${DB_PASSWORD:-not set}"
             env | grep DB
 
-            echo "Creating Docker network..."
+            echo "🐘 Creating Docker network..."
             docker network create pgnet || true
 
-            echo "Removing any old pgdb container..."
+            echo "🐘 Removing any old pgdb container..."
             docker rm -f pgdb || true
 
-            echo "Launching PostgreSQL container..."
+            echo "🐘 Launching PostgreSQL container..."
             docker run -d \
               --name pgdb \
               --network pgnet \
@@ -382,10 +381,10 @@ jobs:
               -e POSTGRES_PASSWORD="$DB_PASSWORD" \
               postgres:14
 
-            echo "Hostname test:"
-            ping -c 1 "$DB_HOST" || echo "Could not resolve $DB_HOST"
+            echo "🔍 Hostname test:"
+            ping -c 1 "$DB_HOST" || echo "❌ Could not resolve $DB_HOST"
 
-            echo "Waiting for PostgreSQL to initialize..."
+            echo "⏳ Waiting for PostgreSQL to initialize..."
             sleep 10
         env:
             DB_USER: ${{ env.DB_USER }}
@@ -401,11 +400,12 @@ jobs:
           script: |
             set -e
             export DB_HOST=pgdb
-            echo "DEBUG: DB_HOST=$DB_HOST"
-            echo "DEBUG: DB_USER=$DB_USER"
-            echo "DEBUG: DB_PASSWORD=$DB_PASSWORD"
-            echo "DEBUG: DB_NAME=$DB_NAME"
-            echo "Checking if DB '$DB_NAME' exists..."
+            echo "🧪 DEBUG: DB_HOST=$DB_HOST"
+            echo "🧪 DEBUG: DB_USER=$DB_USER"
+            echo "🧪 DEBUG: DB_PASSWORD=$DB_PASSWORD"
+            echo "🧪 DEBUG: DB_NAME=$DB_NAME"
+
+            echo "🧪 Checking if DB '$DB_NAME' exists..."
             docker run --rm \
               --network pgnet \
               -e PGPASSWORD="$DB_PASSWORD" \
@@ -419,12 +419,13 @@ jobs:
                 postgres:14 \
                 psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
                 -c "CREATE DATABASE \"$DB_NAME\";"
-              echo "Ensured DB '$DB_NAME' exists."
+
+              echo "✅ Ensured DB '$DB_NAME' exists."
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
-        
+
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -435,13 +436,15 @@ jobs:
           script: |
             set -e
             export DB_HOST=pgdb
-            echo "DEBUG: DB_HOST=$DB_HOST"
-            echo "DEBUG: DB_USER=$DB_USER"
-            echo "DEBUG: DB_NAME=$DB_NAME"
-            echo "Downloading seed files..."
+            echo "✅ DEBUG: DB_HOST=$DB_HOST"
+            echo "✅ DEBUG: DB_USER=$DB_USER"
+            echo "✅ DEBUG: DB_NAME=$DB_NAME"
+
+            echo "🌐 Downloading seed files..."
             curl -L -o seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
             curl -L -o shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
-            echo "Creating Dockerfile for DB Seeder..."
+
+            echo "📦 Creating Dockerfile for DB Seeder..."
             cat <<EOF > Dockerfile.seed
             FROM node:18
             WORKDIR /app
@@ -450,8 +453,10 @@ jobs:
             RUN npm install pg dotenv
             CMD ["node", "seed_db.js", "", "seed"]
             EOF
-            echo "Building and running DB Seeder container..."
+
+            echo "🐳 Building and running DB Seeder container..."
             docker build -f Dockerfile.seed -t db-seeder .
+
             docker run --rm \
               --network pgnet \
               -e DB_USER="$DB_USER" \
@@ -471,13 +476,14 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DB_USER,DB_PASSWORD,DB_NAME
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
           script: |
             set -e
             export DB_HOST=pgdb
-            echo "DEBUG: DB_HOST=$DB_HOST"
-            echo "DEBUG: DB_NAME=$DB_NAME"
-            echo "Creating Dockerfile for DB Verifier..."
+            echo "✅ DEBUG: DB_HOST=$DB_HOST"
+            echo "✅ DEBUG: DB_NAME=$DB_NAME"
+
+            echo "📦 Creating Dockerfile for DB Verifier..."
             cat <<EOF > Dockerfile.verify
             FROM node:18
             WORKDIR /app
@@ -486,8 +492,10 @@ jobs:
             RUN npm install pg dotenv
             CMD ["node", "seed_db.js", "", "verify"]
             EOF
-            echo "Building and running DB Verifier container..."
+
+            echo "🐳 Building and running DB Verifier container..."
             docker build -f Dockerfile.verify -t db-verifier .
+
             docker run --rm \
               --network pgnet \
               -e DB_USER="$DB_USER" \
@@ -500,7 +508,7 @@ jobs:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
-              
+
       ######################################################
       # 🚀 Deploy Backend Docker Image to EC2
       ######################################################
@@ -511,19 +519,22 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DB_USER,DB_PASSWORD,DB_NAME
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
           script: |
             set -e
             export DB_HOST=pgdb
-            echo "DEBUG: DB_HOST=$DB_HOST"
-            echo "DEBUG: DB_NAME=$DB_NAME"
-            echo "DEBUG: DB_USER=$DB_USER"
-            echo "Pulling latest backend image..."
+            echo "✅ DEBUG: DB_HOST=$DB_HOST"
+            echo "✅ DEBUG: DB_NAME=$DB_NAME"
+            echo "✅ DEBUG: DB_USER=$DB_USER"
+
+            echo "📦 Pulling latest backend image..."
             docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
-            echo "Stopping old container if exists..."
+
+            echo "🛑 Stopping old container if exists..."
             docker stop shiptivitas-backend || true
             docker rm shiptivitas-backend || true
-            echo "Launching backend container..."
+
+            echo "🚀 Launching backend container..."
             docker run -d \
               --name shiptivitas-backend \
               -p 3001:3001 \
