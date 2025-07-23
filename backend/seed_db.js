@@ -5,7 +5,9 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const TABLES_TO_CHECK = ['users', 'card', 'card_change_history', 'login_history'];
-const SQL_FILE_PATH = path.join(__dirname, 'shiptivitas_postgres.sql'); 
+const SQL_FILE_PATH = process.env.SQL_FILE
+  ? path.join(__dirname, process.env.SQL_FILE)
+  : path.join(__dirname, 'shiptivitas_postgres.sql');
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -24,8 +26,8 @@ const action = process.argv[2] || 'verify';
   try {
     if (action === 'seed') {
       console.log('⏳ Seeding database...');
+      console.log(`📄 Using SQL file: ${SQL_FILE_PATH}`);
 
-      // Create seed_metadata table if not exists
       await client.query(`
         CREATE TABLE IF NOT EXISTS seed_metadata (
           key TEXT PRIMARY KEY,
@@ -39,7 +41,7 @@ const action = process.argv[2] || 'verify';
         return;
       }
 
-      // Check if all required tables exist
+      // Check for missing tables
       const missingTables = [];
       for (const table of TABLES_TO_CHECK) {
         const res = await client.query(`SELECT to_regclass('public.${table}')`);
@@ -58,7 +60,11 @@ const action = process.argv[2] || 'verify';
         return;
       }
 
-      // Read and execute SQL file
+      // Load SQL file
+      if (!fs.existsSync(SQL_FILE_PATH)) {
+        throw new Error(`SQL file not found at: ${SQL_FILE_PATH}`);
+      }
+
       const sql = fs.readFileSync(SQL_FILE_PATH, 'utf8');
       await client.query(sql);
       await client.query(`INSERT INTO seed_metadata (key, value) VALUES ('db_seeded', 'true');`);
