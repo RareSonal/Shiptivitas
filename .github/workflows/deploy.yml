@@ -454,7 +454,7 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DB_USER,DB_PASSWORD,DB_NAME
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_SSL
           script: |
             set -e
             export DB_HOST=pgdb
@@ -485,12 +485,14 @@ jobs:
               -e DB_PASSWORD="$DB_PASSWORD" \
               -e DB_NAME="$DB_NAME" \
               -e DB_HOST="$DB_HOST" \
+              -e DB_SSL="false" \
               -e SQL_FILE=shiptivitas_postgres.sql \
               db-seeder
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
+          DB_SSL: "false"
               
       - name: 🕵️ Verify DB tables & data via Docker
         uses: appleboy/ssh-action@v0.1.7
@@ -498,7 +500,7 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST,DB_SSL
           script: |
             set -e
             export DB_HOST=pgdb
@@ -524,12 +526,14 @@ jobs:
               -e DB_PASSWORD="$DB_PASSWORD" \
               -e DB_NAME="$DB_NAME" \
               -e DB_HOST="$DB_HOST" \
+              -e DB_SSL="false" \
               -e SQL_FILE=shiptivitas_postgres.sql \
               db-verifier
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
+          DB_SSL: "false"
 
       ######################################################
       # 🚀 Deploy Backend Docker Image to EC2
@@ -541,7 +545,7 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST
+          envs: DB_USER,DB_PASSWORD,DB_NAME,DB_HOST,DB_SSL
           script: |
             set -e
             export DB_HOST=pgdb
@@ -565,8 +569,10 @@ jobs:
               -e DB_NAME="$DB_NAME" \
               -e DB_USER="$DB_USER" \
               -e DB_PASSWORD="$DB_PASSWORD" \
+              -e DB_SSL="false" \
               ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
+          DB_SSL: "false"
