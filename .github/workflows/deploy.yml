@@ -299,12 +299,14 @@ jobs:
       - name: 📥 Fetch EC2 Public IP (Terraform then Fallback)
         id: ec2_info
         run: |
-          set -euo pipefail
+          set +e  
           echo "🔍 Trying to fetch EC2 IP from Terraform output..."
-          EC2_IP=$(terraform output -raw backend_ec2_public_ip 2>/dev/null || echo "")
+          EC2_IP=$(terraform output -raw backend_ec2_public_ip 2>/dev/null)
+          TF_EXIT_CODE=$?
+          set -e  
 
-          if [ -z "$EC2_IP" ] || [ "$EC2_IP" = "null" ]; then
-            echo "⚠️ Terraform output empty. Falling back to AWS CLI..."
+          if [ $TF_EXIT_CODE -ne 0 ] || [ -z "$EC2_IP" ] || [ "$EC2_IP" = "null" ]; then
+            echo "⚠️ Terraform output failed or was empty. Falling back to AWS CLI..."
 
             INSTANCE_ID=$(aws ec2 describe-instances \
               --filters "Name=tag:Name,Values=Shiptivitas-API" \
