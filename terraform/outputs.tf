@@ -9,8 +9,12 @@ output "cloudfront_url" {
 }
 
 output "backend_ec2_public_ip" {
-  description = "Public IP of EC2 instance"
-  value       = try(aws_instance.shiptivitas_api[0].public_ip, null)
+  description = "Public IP of EC2 instance (if created)"
+  value = try(
+    length(aws_instance.shiptivitas_api) > 0 ?
+      aws_instance.shiptivitas_api[0].public_ip : null,
+    null
+  )
 }
 
 output "rds_endpoint" {
