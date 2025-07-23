@@ -5,11 +5,11 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const TABLES_TO_CHECK = ['users', 'card', 'card_change_history', 'login_history'];
-const SQL_FILE_PATH = path.join(__dirname, 'shiptivitas_postgres.sql'); // Your .sql seed file
+const SQL_FILE_PATH = path.join(__dirname, 'shiptivitas_postgres.sql'); 
 
 const pool = new Pool({
   user: process.env.DB_USER,
-  host: process.env.DB_SERVER,
+  host: process.env.DB_HOST,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: 5432,
