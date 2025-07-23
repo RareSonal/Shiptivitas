@@ -296,18 +296,36 @@ jobs:
       # Use Terraform output to get EC2 IP reliably
       ######################################################
 
-      - name: 📥 Fetch EC2 Public IP from Terraform output
+      - name: 📥 Fetch EC2 Public IP (Terraform then Fallback)
         id: ec2_info
         run: |
           set -euo pipefail
-          echo "Fetching EC2 public IP from Terraform output..."
+          echo "🔍 Trying to fetch EC2 IP from Terraform output..."
           EC2_IP=$(terraform output -raw backend_ec2_public_ip 2>/dev/null || echo "")
+
           if [ -z "$EC2_IP" ] || [ "$EC2_IP" = "null" ]; then
-            echo "❌ EC2 IP not found or not created—skipping any SSH steps."
+            echo "⚠️ Terraform output empty. Falling back to AWS CLI..."
+
+            INSTANCE_ID=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=Shiptivitas-API" \
+              --query "Reservations[].Instances[].InstanceId" \
+              --output text)
+
+            if [ -n "$INSTANCE_ID" ]; then
+              EC2_IP=$(aws ec2 describe-instances \
+                --instance-ids "$INSTANCE_ID" \
+                --query "Reservations[].Instances[].PublicIpAddress" \
+                --output text)
+            fi
+          fi
+
+          if [ -z "$EC2_IP" ]; then
+            echo "❌ EC2 IP not found."
             echo "EC2_IP=" >> "$GITHUB_ENV"
             echo "ip=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
           echo "✅ EC2 IP = $EC2_IP"
           echo "EC2_IP=$EC2_IP" >> "$GITHUB_ENV"
           echo "ip=$EC2_IP" >> "$GITHUB_OUTPUT"
