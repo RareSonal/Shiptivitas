@@ -301,16 +301,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "Fetching EC2 public IP from Terraform output..."
-    
-          EC2_IP=$(terraform -chdir=terraform output -raw backend_ec2_public_ip 2>/dev/null || echo "")
-    
+          EC2_IP=$(terraform output -raw backend_ec2_public_ip 2>/dev/null || echo "")
           if [ -z "$EC2_IP" ] || [ "$EC2_IP" = "null" ]; then
             echo "❌ EC2 IP not found or not created—skipping any SSH steps."
             echo "EC2_IP=" >> "$GITHUB_ENV"
             echo "ip=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           echo "✅ EC2 IP = $EC2_IP"
           echo "EC2_IP=$EC2_IP" >> "$GITHUB_ENV"
           echo "ip=$EC2_IP" >> "$GITHUB_OUTPUT"
