@@ -13,16 +13,17 @@ app.use(cors());
 app.use(express.json());
 
 // PostgreSQL RDS config
+const useSSL = process.env.DB_SSL === 'true';
+
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
-  port: 5432, 
-  ssl: {
-    rejectUnauthorized: false, // Use true in production with proper cert
-  },
+  port: 5432,
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
+
 
 // ✅ Test DB connection
 pool.connect()
