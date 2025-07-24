@@ -59,8 +59,8 @@ resource "aws_iam_policy" "ssm_read" {
         Effect = "Allow"
         Action = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = [
-          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_username_ssm_path}",
-          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_password_ssm_path}"
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.ec2_identity.account_id}:parameter${var.db_username_ssm_path}",
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.ec2_identity.account_id}:parameter${var.db_password_ssm_path}"
         ]
       }
     ]
@@ -91,6 +91,18 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 data "template_file" "ec2_user_data" {
   count    = var.create_ec2 ? 1 : 0
   template = file("${path.module}/setup-ec2.sh")
+}
+
+# Create or update security group with port 3001 open
+resource "aws_security_group_rule" "allow_api_port_3001" {
+  count             = var.create_ec2 ? 1 : 0
+  type              = "ingress"
+  from_port         = 3001
+  to_port           = 3001
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = var.security_group_id
+  description       = "Allow HTTP access to API on port 3001"
 }
 
 # Launch EC2 instance
