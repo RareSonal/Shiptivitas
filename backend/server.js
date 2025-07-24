@@ -18,7 +18,7 @@ const pool = new Pool({
   host: process.env.DB_HOST,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
-  port: 5432, // Default port for PostgreSQL
+  port: 5432, 
   ssl: {
     rejectUnauthorized: false, // Use true in production with proper cert
   },
