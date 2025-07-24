@@ -469,7 +469,7 @@ jobs:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: temp_seed_files/
+          source: ./temp_seed_files/
           target: /home/ec2-user/
 
       - name: 🛠️ Seed PostgreSQL DB via Docker
