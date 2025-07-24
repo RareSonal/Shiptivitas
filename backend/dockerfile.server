@@ -5,17 +5,16 @@ FROM node:18
 WORKDIR /usr/src/app
 
 # Copy package.json and package-lock.json first for layer caching
-COPY package*.json ./
+COPY backend/package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the application code
-COPY . .
+# Copy backend application code
+COPY backend/. .
 
-# Copy seed files explicitly (optional if already included in COPY . .)
-COPY backend/seed_db.js ./seed_db.js
-COPY database/shiptivitas_postgres.sql ./shiptivitas_postgres.sql
+# Copy the SQL file from the database folder
+COPY database/shiptivitas_postgres.sql ./
 
 # Expose the port your app runs on
 EXPOSE 3001
