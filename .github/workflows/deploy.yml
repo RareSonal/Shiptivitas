@@ -254,10 +254,16 @@ jobs:
       - name: 📦 Check for backend changes
         id: backend_changes
         run: |
-          if git diff --quiet HEAD^ HEAD -- ./backend; then
-            echo "CHANGED=false" >> $GITHUB_ENV
-            echo "changed=false" >> $GITHUB_OUTPUT
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            if git diff --quiet HEAD^ HEAD -- ./backend; then
+              echo "CHANGED=false" >> $GITHUB_ENV
+              echo "changed=false" >> $GITHUB_OUTPUT
+            else
+              echo "CHANGED=true" >> $GITHUB_ENV
+              echo "changed=true" >> $GITHUB_OUTPUT
+            fi
           else
+            echo "🟡 HEAD^ doesn't exist (probably first commit). Assuming changes."
             echo "CHANGED=true" >> $GITHUB_ENV
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
