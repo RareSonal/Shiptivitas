@@ -454,6 +454,20 @@ jobs:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
 
+      - name: 🕵️ Inspect image for seed_db.js and .sql
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            echo "🔄 Pulling latest backend image..."
+            docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
+
+            echo "🔍 Checking for seed_db.js and .sql file..."
+            docker run --rm ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest \
+            sh -c "ls -lah /usr/src/app/seed_db.js && ls -lah /usr/src/app/shiptivitas_postgres.sql"
 
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
