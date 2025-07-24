@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: 🧾 Checkout Code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
 
       - name: ⚙️ Set up Terraform
         uses: hashicorp/setup-terraform@v2
