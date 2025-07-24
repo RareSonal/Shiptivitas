@@ -463,7 +463,7 @@ jobs:
           source: |
             backend/seed_db.js
             database/shiptivitas_postgres.sql
-            target: /home/ec2-user/
+          target: /home/ec2-user/
 
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
