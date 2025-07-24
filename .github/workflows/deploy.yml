@@ -286,7 +286,7 @@ jobs:
         if: steps.backend_changes.outputs.changed == 'true'
         uses: docker/build-push-action@v3
         with:
-          context: ./backend
+          context: .
           file: ./backend/dockerfile.server
           push: true
           tags: |
