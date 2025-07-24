@@ -478,7 +478,7 @@ jobs:
               -e DB_HOST="$DB_HOST" \
               -e DB_SSL="$DB_SSL" \
               -e SQL_FILE=shiptivitas_postgres.sql \
-              db-seeder \
+              ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest \
               node seed_db.js seed
         env:
           DB_USER: ${{ env.DB_USER }}
@@ -508,7 +508,7 @@ jobs:
               -e DB_HOST="$DB_HOST" \
               -e DB_SSL="$DB_SSL" \
               -e SQL_FILE=shiptivitas_postgres.sql \
-              db-verifier \
+              ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest \
               node seed_db.js verify
         env:
           DB_USER: ${{ env.DB_USER }}
