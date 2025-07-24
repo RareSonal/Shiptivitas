@@ -35,7 +35,7 @@ resource "aws_s3_bucket_cors_configuration" "cors" {
   }
 }
 
-resource "aws_s3_bucket_policy" "frontend_policy" {
+resource "aws_s3_bucket_policy" "allow_cloudfront_access" {
   count  = var.create_s3_bucket ? 1 : 0
   bucket = aws_s3_bucket.shiptivitas_frontend[0].id
 
@@ -48,8 +48,10 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
         Principal = {
           Service = "cloudfront.amazonaws.com"
         },
-        Action    = "s3:GetObject",
-        Resource  = "${aws_s3_bucket.shiptivitas_frontend[0].arn}/*",
+        Action = [
+          "s3:GetObject"
+        ],
+        Resource = "${aws_s3_bucket.shiptivitas_frontend[0].arn}/*",
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = var.use_existing_cdn ? data.aws_cloudfront_distribution.existing[0].arn : aws_cloudfront_distribution.cdn[0].arn
