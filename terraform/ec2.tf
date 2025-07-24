@@ -93,18 +93,6 @@ data "template_file" "ec2_user_data" {
   template = file("${path.module}/setup-ec2.sh")
 }
 
-# Create or update security group with port 3001 open
-resource "aws_security_group_rule" "allow_api_port_3001" {
-  count             = var.create_ec2 ? 1 : 0
-  type              = "ingress"
-  from_port         = 3001
-  to_port           = 3001
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = var.security_group_id
-  description       = "Allow HTTP access to API on port 3001"
-}
-
 # Launch EC2 instance
 resource "aws_instance" "shiptivitas_api" {
   count                           = var.create_ec2 ? 1 : 0
