@@ -454,6 +454,17 @@ jobs:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
 
+      - name: 📤 Upload Seed Files to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: |
+            backend/seed_db.js
+            database/shiptivitas_postgres.sql
+            target: /home/ec2-user/
+
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -467,10 +478,6 @@ jobs:
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_USER=$DB_USER"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
-
-            echo "🌐 Downloading seed files..."
-            curl -L -o seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
-            curl -L -o shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
 
             echo "📦 Creating Dockerfile for DB Seeder..."
             cat <<EOF > Dockerfile.seed
@@ -499,7 +506,7 @@ jobs:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
           DB_SSL: "false"
-    
+
       - name: 🕵️ Verify DB tables & data via Docker
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -512,10 +519,6 @@ jobs:
             export DB_HOST=pgdb
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
-
-            echo "🌐 Downloading seed files..."
-            curl -L -o seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
-            curl -L -o shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
 
             echo "📦 Creating Dockerfile for DB Verifier..."
             cat <<EOF > Dockerfile.verify
