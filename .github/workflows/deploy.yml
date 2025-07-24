@@ -454,23 +454,6 @@ jobs:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
 
-      - name: 📥 Download seed files from GitHub
-        run: |
-          mkdir -p ./temp_seed_files
-          curl -sSL -o ./temp_seed_files/seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
-          curl -sSL -o ./temp_seed_files/shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
-
-          echo "📦 Contents of temp_seed_files:"
-          ls -la ./temp_seed_files
-
-      - name: 📤 Upload Seed Files to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ steps.ec2_info.outputs.ip }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ./temp_seed_files/
-          target: /home/ec2-user/
 
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
@@ -486,19 +469,7 @@ jobs:
             echo "✅ DEBUG: DB_USER=$DB_USER"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
 
-            echo "📦 Creating Dockerfile for DB Seeder..."
-            cat <<EOF > Dockerfile.seed
-            FROM node:18
-            WORKDIR /app
-            COPY seed_db.js .
-            COPY shiptivitas_postgres.sql .
-            RUN npm install pg dotenv
-            CMD ["node", "seed_db.js", "seed"]
-            EOF
-
-            echo "🐳 Building and running DB Seeder container..."
-            docker build -f Dockerfile.seed -t db-seeder .
-
+            echo "🐳 Running DB Seeder container..."
             docker run --rm \
               --network pgnet \
               -e DB_USER="$DB_USER" \
@@ -507,7 +478,8 @@ jobs:
               -e DB_HOST="$DB_HOST" \
               -e DB_SSL="$DB_SSL" \
               -e SQL_FILE=shiptivitas_postgres.sql \
-              db-seeder
+              db-seeder \
+              node seed_db.js seed
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -527,19 +499,7 @@ jobs:
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
 
-            echo "📦 Creating Dockerfile for DB Verifier..."
-            cat <<EOF > Dockerfile.verify
-            FROM node:18
-            WORKDIR /app
-            COPY seed_db.js .
-            COPY shiptivitas_postgres.sql .
-            RUN npm install pg dotenv
-            CMD ["node", "seed_db.js", "verify"]
-            EOF
-
-            echo "🐳 Building and running DB Verifier container..."
-            docker build -f Dockerfile.verify -t db-verifier .
-
+            echo "🐳 Running DB Verifier container..."
             docker run --rm \
               --network pgnet \
               -e DB_USER="$DB_USER" \
@@ -548,7 +508,8 @@ jobs:
               -e DB_HOST="$DB_HOST" \
               -e DB_SSL="$DB_SSL" \
               -e SQL_FILE=shiptivitas_postgres.sql \
-              db-verifier
+              db-verifier \
+              node seed_db.js verify
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
