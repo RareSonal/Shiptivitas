@@ -454,15 +454,22 @@ jobs:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           DB_NAME: ${{ env.DB_NAME }}
 
+      - name: 📥 Download seed files from GitHub
+        run: |
+          mkdir -p ./temp_seed_files
+          curl -sSL -o ./temp_seed_files/seed_db.js https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/backend/seed_db.js
+          curl -sSL -o ./temp_seed_files/shiptivitas_postgres.sql https://raw.githubusercontent.com/RareSonal/Shiptivitas/main/database/shiptivitas_postgres.sql
+
+          echo "📦 Contents of temp_seed_files:"
+          ls -la ./temp_seed_files
+
       - name: 📤 Upload Seed Files to EC2
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: |
-            backend/seed_db.js
-            database/shiptivitas_postgres.sql
+          source: temp_seed_files/
           target: /home/ec2-user/
 
       - name: 🛠️ Seed PostgreSQL DB via Docker
