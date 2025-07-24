@@ -15,7 +15,7 @@ app.use(express.json());
 // PostgreSQL RDS config
 const pool = new Pool({
   user: process.env.DB_USER,
-  host: process.env.DB_SERVER,
+  host: process.env.DB_HOST,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: 5432, // Default port for PostgreSQL
