@@ -1,23 +1,39 @@
-# Use an official Node.js base image
+# Use official Node.js base image
 FROM node:18
 
-# Set working directory inside container
+# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json first for layer caching
+# Install cron
+RUN apt-get update && \
+    apt-get install -y cron && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Copy package files first for caching
 COPY backend/package*.json ./
 
-# Install dependencies
+# Install Node dependencies
 RUN npm install
 
-# Copy backend application code
+# Copy application code
 COPY backend/. .
 
-# Copy the SQL file from the database folder
+# Copy database SQL
 COPY database/shiptivitas_postgres.sql ./
 
-# Expose the port your app runs on
+# Add cleanup script
+COPY backend/cleanup.sh /usr/local/bin/cleanup.sh
+
+# Make the cleanup script executable
+RUN chmod +x /usr/local/bin/cleanup.sh
+
+# Setup daily cron job at 3 AM
+RUN echo "0 3 * * * /usr/local/bin/cleanup.sh >> /usr/src/app/cleanup.log 2>&1" > /etc/cron.d/docker-cleanup \
+    && chmod 0644 /etc/cron.d/docker-cleanup \
+    && crontab /etc/cron.d/docker-cleanup
+
+# Expose application port
 EXPOSE 3001
 
-# Define the command to run the server
-CMD ["node", "server.js"]
+# Start cron in the background and then start your app
+CMD cron && node server.js
