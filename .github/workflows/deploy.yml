@@ -388,15 +388,11 @@ jobs:
           envs: DB_USER,DB_PASSWORD,DB_NAME
           script: |
             set -e
-
-            export DB_HOST=pgdb
+            export DB_HOST=localhost
 
             echo "🔧 Using DB_USER=$DB_USER"
             echo "🔧 Using DB_PASSWORD=$DB_PASSWORD"
             echo "🔧 Using DB_NAME=$DB_NAME"
-
-            echo "🔧 Setting up Docker network..."
-            docker network create pgnet || true
 
             echo "🧹 Removing old pgdb container (if any)..."
             docker rm -f pgdb || true
@@ -404,34 +400,34 @@ jobs:
             echo "🐘 Launching PostgreSQL container..."
             docker run -d \
               --name pgdb \
-              --network pgnet \
+              -p 5432:5432 \
               -e POSTGRES_USER="$DB_USER" \
               -e POSTGRES_PASSWORD="$DB_PASSWORD" \
               postgres:14
 
             echo "⏳ Waiting for PostgreSQL to be ready..."
             for i in {1..10}; do
-              docker run --rm --network pgnet \
+              docker run --rm \
                 -e PGPASSWORD="$DB_PASSWORD" \
                 postgres:14 \
                 psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c '\q' && break
-                echo "⏳ Still waiting for DB ($i/10)..."
-                sleep 2
+              echo "⏳ Still waiting for DB ($i/10)..."
+              sleep 2
             done
 
             echo "🔍 Checking if database '$DB_NAME' exists..."
-            docker run --rm --network pgnet \
+            docker run --rm \
               -e PGPASSWORD="$DB_PASSWORD" \
               postgres:14 \
               psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
               "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
-              docker run --rm --network pgnet \
-              -e PGPASSWORD="$DB_PASSWORD" \
-              postgres:14 \
-              psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
-              -c "CREATE DATABASE \"$DB_NAME\";"
+            docker run --rm \
+                -e PGPASSWORD="$DB_PASSWORD" \
+                postgres:14 \
+                psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
+                -c "CREATE DATABASE \"$DB_NAME\";"
 
-              echo "✅ PostgreSQL database '$DB_NAME' is ready and available."
+            echo "✅ PostgreSQL database '$DB_NAME' is ready."
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
