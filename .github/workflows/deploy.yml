@@ -246,7 +246,6 @@ jobs:
         working-directory: frontend
         run: |
           aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
-
       # -------------------------------------------------------
       # Backend Docker build, deploy, DB download & seed/verify
       # -------------------------------------------------------
@@ -267,7 +266,6 @@ jobs:
             echo "CHANGED=true" >> $GITHUB_ENV
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-
       - name: 🔧 Set lowercase repo owner
         id: vars
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
@@ -310,15 +308,12 @@ jobs:
           EC2_IP=$(terraform output -raw backend_ec2_public_ip 2>/dev/null)
           TF_EXIT_CODE=$?
           set -e  
-
           if [ $TF_EXIT_CODE -ne 0 ] || [ -z "$EC2_IP" ] || [ "$EC2_IP" = "null" ]; then
             echo "⚠️ Terraform output failed or was empty. Falling back to AWS CLI..."
-
             INSTANCE_ID=$(aws ec2 describe-instances \
               --filters "Name=tag:Name,Values=Shiptivitas-API" \
               --query "Reservations[].Instances[].InstanceId" \
               --output text)
-
             if [ -n "$INSTANCE_ID" ]; then
               EC2_IP=$(aws ec2 describe-instances \
                 --instance-ids "$INSTANCE_ID" \
@@ -326,18 +321,15 @@ jobs:
                 --output text)
             fi
           fi
-
           if [ -z "$EC2_IP" ]; then
             echo "❌ EC2 IP not found."
             echo "EC2_IP=" >> "$GITHUB_ENV"
             echo "ip=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           echo "✅ EC2 IP = $EC2_IP"
           echo "EC2_IP=$EC2_IP" >> "$GITHUB_ENV"
           echo "ip=$EC2_IP" >> "$GITHUB_OUTPUT"
-
       ######################################################
       # Fetch DB credentials from SSM
       ######################################################
@@ -346,25 +338,21 @@ jobs:
         run: |
           set -e
           echo "Fetching DB credentials from SSM..."
-
           DB_USER=$(aws ssm get-parameter \
             --name "${{ secrets.DB_USERNAME_SSM_PATH }}" \
             --with-decryption \
             --region $AWS_REGION \
             --query 'Parameter.Value' \
             --output text)
-
           DB_PASSWORD=$(aws ssm get-parameter \
             --name "${{ secrets.DB_PASSWORD_SSM_PATH }}" \
             --with-decryption \
             --region $AWS_REGION \
             --query 'Parameter.Value' \
             --output text)
-
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
-
       - name: ♻️ Export DB envs as outputs
         id: export_envs
         run: |
@@ -374,60 +362,73 @@ jobs:
           echo "db_user=${{ env.DB_USER }}" >> $GITHUB_OUTPUT
           echo "db_password=${{ env.DB_PASSWORD }}" >> $GITHUB_OUTPUT
           echo "db_name=${{ env.DB_NAME }}" >> $GITHUB_OUTPUT
-
       ######################################################
       # Launch PostgreSQL on EC2 via SSH
       ######################################################
 
-      - name: 🐘 Ensure PostgreSQL DB exists via SSH on EC2
+      - name: 🏗️ Launch PostgreSQL Docker on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ env.EC2_IP }}
+          host: ${{ steps.ec2_info.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DB_USER,DB_PASSWORD
+          script: |
+            set -e
+            export DB_HOST=pgdb
+            echo "✅ Inside EC2 via SSH"
+            echo "✅ DB_HOST=${DB_HOST:-not set}"
+            echo "✅ DB_USER=${DB_USER:-not set}"
+            echo "✅ DB_PASSWORD=${DB_PASSWORD:-not set}"
+            env | grep DB
+            echo "🐘 Creating Docker network..."
+            docker network create pgnet || true
+            echo "🐘 Removing any old pgdb container..."
+            docker rm -f pgdb || true
+            echo "🐘 Launching PostgreSQL container..."
+            docker run -d \
+              --name pgdb \
+              --network pgnet \
+              -e POSTGRES_USER="$DB_USER" \
+              -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+              postgres:14
+            echo "🔍 Hostname test:"
+            ping -c 1 "$DB_HOST" || echo "❌ Could not resolve $DB_HOST"
+            echo "⏳ Waiting for PostgreSQL to initialize..."
+            sleep 10
+        env:
+            DB_USER: ${{ env.DB_USER }}
+            DB_PASSWORD: ${{ env.DB_PASSWORD }}
+
+      - name: 🏗️ Ensure Database Exists
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2_info.outputs.ip }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: DB_USER,DB_PASSWORD,DB_NAME
           script: |
             set -e
-            export DB_HOST=localhost
-
-            echo "🔧 Using DB_USER=$DB_USER"
-            echo "🔧 Using DB_PASSWORD=$DB_PASSWORD"
-            echo "🔧 Using DB_NAME=$DB_NAME"
-
-            echo "🧹 Removing old pgdb container (if any)..."
-            docker rm -f pgdb || true
-
-            echo "🐘 Launching PostgreSQL container..."
-            docker run -d \
-              --name pgdb \
-              -p 5432:5432 \
-              -e POSTGRES_USER="$DB_USER" \
-              -e POSTGRES_PASSWORD="$DB_PASSWORD" \
-              postgres:14
-
-            echo "⏳ Waiting for PostgreSQL to be ready..."
-            for i in {1..10}; do
-              docker run --rm \
-                -e PGPASSWORD="$DB_PASSWORD" \
-                postgres:14 \
-                psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c '\q' && break
-              echo "⏳ Still waiting for DB ($i/10)..."
-              sleep 2
-            done
-
-            echo "🔍 Checking if database '$DB_NAME' exists..."
+            export DB_HOST=pgdb
+            echo "🧪 DEBUG: DB_HOST=$DB_HOST"
+            echo "🧪 DEBUG: DB_USER=$DB_USER"
+            echo "🧪 DEBUG: DB_PASSWORD=$DB_PASSWORD"
+            echo "🧪 DEBUG: DB_NAME=$DB_NAME"
+            echo "🧪 Checking if DB '$DB_NAME' exists..."
             docker run --rm \
+              --network pgnet \
               -e PGPASSWORD="$DB_PASSWORD" \
               postgres:14 \
               psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
-              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
-            docker run --rm \
+              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" \
+              | grep -q 1 || \
+              docker run --rm \
+                --network pgnet \
                 -e PGPASSWORD="$DB_PASSWORD" \
                 postgres:14 \
                 psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
                 -c "CREATE DATABASE \"$DB_NAME\";"
-
-            echo "✅ PostgreSQL database '$DB_NAME' is ready."
+              echo "✅ Ensured DB '$DB_NAME' exists."
         env:
           DB_USER: ${{ env.DB_USER }}
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -443,11 +444,9 @@ jobs:
             set -e
             echo "🔄 Pulling latest backend image..."
             docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
-
             echo "🔍 Checking for seed_db.js and .sql file..."
             docker run --rm ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest \
             sh -c "ls -lah /usr/src/app/seed_db.js && ls -lah /usr/src/app/shiptivitas_postgres.sql"
-
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -461,7 +460,6 @@ jobs:
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_USER=$DB_USER"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
-
             echo "🐳 Running DB Seeder container..."
             docker run --rm \
               --network pgnet \
@@ -491,7 +489,6 @@ jobs:
             export DB_HOST=pgdb
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
-
             echo "🐳 Running DB Verifier container..."
             docker run --rm \
               --network pgnet \
@@ -526,14 +523,11 @@ jobs:
             echo "✅ DEBUG: DB_HOST=$DB_HOST"
             echo "✅ DEBUG: DB_NAME=$DB_NAME"
             echo "✅ DEBUG: DB_USER=$DB_USER"
-
             echo "📦 Pulling latest backend image..."
             docker pull ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest
-
             echo "🛑 Stopping old container if exists..."
             docker stop shiptivitas-backend || true
             docker rm shiptivitas-backend || true
-
             echo "🚀 Launching backend container..."
             docker run -d \
               --name shiptivitas-backend \
