@@ -382,7 +382,7 @@ jobs:
       - name: 🐘 Ensure PostgreSQL DB exists via SSH on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_IP }}
+          host: ${{ env.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: DB_USER,DB_PASSWORD,DB_NAME
