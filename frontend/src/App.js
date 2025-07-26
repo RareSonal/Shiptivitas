@@ -40,7 +40,7 @@ class App extends Component {
 
   handleUnlock = async (pin, userId) => {
     try {
-      const cardsRes = await fetch('/api/cards');
+      const cardsRes = await fetch('ec2-3.81.143.88.compute-1.amazonaws.com/api/cards');
       const cards = await cardsRes.json();
 
       const groupedCards = {
@@ -63,7 +63,7 @@ class App extends Component {
 
   handleCardChange = async (cardID, oldStatus, newStatus, oldPriority, newPriority) => {
     try {
-      await fetch('/api/card-change', {
+      await fetch('ec2-3.81.143.88.compute-1.amazonaws.com/api/card-change', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
