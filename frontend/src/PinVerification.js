@@ -20,7 +20,7 @@ export default function PinVerification({ onUnlock }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('ec2-3.81.143.88.compute-1.amazonaws.com/api/verify-pin', {
+      const response = await fetch('/api/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
