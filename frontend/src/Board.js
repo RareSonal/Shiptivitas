@@ -68,7 +68,7 @@ export default class Board extends Component {
       console.log(`Updating card status for card ID: ${cardId}, from ${oldStatus} to ${targetStatus}`);
 
       // Update the card status and priority via API
-      const response = await fetch(`/api/v1/cards/${card.id}`, {
+      const response = await fetch(`ec2-3.81.143.88.compute-1.amazonaws.com/api/v1/cards/${card.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
