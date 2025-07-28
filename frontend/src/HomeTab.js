@@ -10,6 +10,8 @@ export default function HomeTab({ onUnlock }) {
     setPin(e.target.value);
   };
 
+  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
+
   const handleUnlockClick = async () => {
     if (pin.length !== 4 || isNaN(pin)) {
       setErrorMessage('Please enter a valid 4-digit PIN.');
@@ -21,7 +23,7 @@ export default function HomeTab({ onUnlock }) {
 
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_BASE_URL}/api/verify-pin`,
+        `${apiBaseUrl}/api/verify-pin`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
