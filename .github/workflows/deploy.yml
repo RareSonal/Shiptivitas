@@ -233,12 +233,17 @@ jobs:
         with:
           node-version: '18'
 
-      - name: 🚧 Build Frontend
+      - name: 🚧 Clean & Build Frontend
         working-directory: frontend
         env:
           REACT_APP_API_BASE_URL: ${{ secrets.REACT_APP_API_BASE_URL }}
         run: |
+          echo "🔧 REACT_APP_API_BASE_URL: $REACT_APP_API_BASE_URL"
+          echo "🧹 Removing old build directory..."
+          rm -rf build
+          echo "📦 Installing dependencies..."
           npm ci
+          echo "🛠️ Building frontend..."
           npm run build
           
       - name: 📂 List build directory
