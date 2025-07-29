@@ -24,13 +24,12 @@ const pool = new Pool({
   ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
-
-// ✅ Test DB connection
+// Test DB connection
 pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL (RDS)'))
   .catch(err => console.error('❌ PostgreSQL connection failed:', err));
 
-// 🟢 Get all cards
+// Get all cards
 app.get('/api/cards', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM card');
@@ -41,7 +40,7 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-// 🟡 Update card status and priority
+// Update card status and priority
 app.put('/api/v1/cards/:cardId', async (req, res) => {
   const { cardId } = req.params;
   const { newStatus, newPriority, oldStatus, oldPriority } = req.body;
@@ -56,6 +55,7 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // Update the card
     await client.query(
       `UPDATE card
        SET status = $1, priority = $2
@@ -63,8 +63,10 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       [newStatus, newPriority, cardId]
     );
 
+    // Log the change
     await client.query(
-      `INSERT INTO card_change_history (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
+      `INSERT INTO card_change_history 
+       (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [cardId, oldStatus, newStatus, oldPriority, newPriority, timestamp]
     );
@@ -75,14 +77,17 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
     res.status(200).json(result.rows);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error updating card:', err);
-    res.status(500).json({ error: 'Failed to update card' });
+    console.error('❌ Error updating card:', err); // full error
+    res.status(500).json({
+      error: 'Failed to update card',
+      details: err.message, // include error message in response
+    });
   } finally {
     client.release();
   }
 });
 
-// 🔐 Verify PIN only (no user ID required)
+// Verify PIN only
 app.post('/api/verify-pin', async (req, res) => {
   const { pin } = req.body;
 
@@ -111,6 +116,5 @@ app.post('/api/verify-pin', async (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`🚀 Server running on port ${port}`);
 });
-
