@@ -130,7 +130,7 @@ Features:
 - PostgreSQL seeding + verification
 
 # 🧰 Tech Stack
-| **Layer**      | **Technology**                                                                 |
+| Layer          |   Technology                                                                   |
 |----------------|--------------------------------------------------------------------------------|
 | IaC            | Terraform                                                                      |
 | CI/CD          | GitHub Actions                                                                 |
