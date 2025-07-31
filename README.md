@@ -130,17 +130,17 @@ Features:
 - PostgreSQL seeding + verification
 
 # 🧰 Tech Stack
-| Layer          |   Technology                                                                   |
-|----------------|--------------------------------------------------------------------------------|
-| IaC            | Terraform                                                                      |
-| CI/CD          | GitHub Actions                                                                 |
-| Frontend       | React (Vite), hosted on AWS S3 + served via CloudFront                         |
-| Backend        | Node.js (Express), Dockerized and deployed on EC2                              |
-| Database       | PostgreSQL (via Docker container on EC2)                                       |
-| Container Registry | GitHub Container Registry (GHCR)                                           |
-| Secrets        | GitHub Secrets, AWS SSM Parameter Store                                        |
-| Authentication | OIDC (Azure & AWS GitHub Actions federated identity)                           |
-| Cloud Providers| AWS (EC2, S3, CloudFront, IAM, VPC), Azure (Terraform state backend via Blob)  |
+| Layer             | Technology                                                                     |
+|-------------------|--------------------------------------------------------------------------------|
+| IaC               | Terraform                                                                      |
+| CI/CD             | GitHub Actions                                                                 |
+| Frontend          | React (Vite), hosted on AWS S3 + served via CloudFront                         |
+| Backend           | Node.js (Express), Dockerized and deployed on EC2                              |
+| Database          | PostgreSQL (via Docker container on EC2)                                       |
+| Container Registry| GitHub Container Registry (GHCR)                                               |
+| Secrets           | GitHub Secrets, AWS SSM Parameter Store                                        |
+| Authentication    | OIDC (Azure & AWS GitHub Actions federated identity)                           |
+| Cloud Providers   | AWS (EC2, S3, CloudFront, IAM, VPC), Azure (Terraform state backend via Blob)  |
 
 # 📬 Contributions
 Pull requests and suggestions are welcome! If you'd like to add support for automatic PR-based deploy previews, CI testing, or multi-region deployment — open an issue or PR.
