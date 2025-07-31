@@ -92,11 +92,14 @@ The project uses modular Terraform split into:
   - terraform/: Provisions full AWS infrastructure
 
 Commands:
+
 # Bootstrap (in ./bootstrap)
+
 terraform init
 terraform apply
 
 # Deployment (in ./terraform)
+
 terraform init
 terraform plan
 terraform apply
