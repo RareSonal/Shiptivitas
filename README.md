@@ -95,14 +95,14 @@ The project uses modular Terraform split into:
 
 - Bootstrap (in ./bootstrap)
 
-terraform init
-terraform apply
+  1. terraform init
+  2. terraform apply
 
 - Deployment (in ./terraform)
 
-terraform init
-terraform plan
-terraform apply
+  1. terraform init
+  2. terraform plan
+  3. terraform apply
 
 NOTE: Terraform state is stored remotely in Azure, configured in backend.tf.
 
