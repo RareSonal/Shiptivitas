@@ -1,9 +1,9 @@
-🚀 Shiptivitas
+##🚀 Shiptivitas
 
 A modern cloud-native project that bootstraps, deploys, and manages infrastructure and applications across Azure and AWS using Terraform and GitHub Actions CI/CD. 
 Shiptivitas features a full-stack web app with a PostgreSQL database, Dockerized backend, S3-hosted frontend, and automated infrastructure provisioning.
 
-📌 Project Overview
+##📌 Project Overview
 
 Shiptivitas automates everything from infrastructure provisioning to application deployment using infrastructure-as-code principles. It leverages:
 
@@ -13,7 +13,7 @@ Shiptivitas automates everything from infrastructure provisioning to application
 - **AWS** for infrastructure deployment
 - **Azure** for remote Terraform state storage
 
-🏗️ Architecture Diagram
+##🏗️ Architecture Diagram
 
                                                                 ┌─────────────────────┐
                                                                 │   GitHub Actions    │
@@ -42,7 +42,7 @@ Shiptivitas automates everything from infrastructure provisioning to application
 
 
 
-🛠️ Setup Instructions
+##🛠️ Setup Instructions
 
 ⚙️ Local Development
 
@@ -61,15 +61,15 @@ Shiptivitas automates everything from infrastructure provisioning to application
    npm install
    REACT_APP_API_BASE_URL=http://localhost:3001 npm start
 
-☁️ Cloud Bootstrap (Azure)
-1. Bootstrap the Terraform backend using Azure
+##☁️ Cloud Bootstrap (Azure)
+Bootstrap the Terraform backend using Azure
 
    - Trigger the Bootstrap Terraform Backend (Azure) GitHub Action manually.
      
    - This sets up remote backend storage for state management.
 
-☁️ Cloud Deployment (AWS)
-2. Deploy everything by triggering the Deploy Shiptivitas Infrastructure workflow:
+##☁️ Cloud Deployment (AWS)
+Deploy everything by triggering the Deploy Shiptivitas Infrastructure workflow:
 
    - Terraform provisions:
      S3 bucket for frontend
@@ -84,7 +84,7 @@ Shiptivitas automates everything from infrastructure provisioning to application
 
    - PostgreSQL is initialized, seeded, and verified
 
-🧱 Terraform Usage
+##🧱 Terraform Usage
 The project uses modular Terraform split into:
 
   - bootstrap/: Bootstraps Azure Storage Account for Terraform state
@@ -106,7 +106,7 @@ terraform apply
 
 NOTE: Terraform state is stored remotely in Azure, configured in backend.tf.
 
-🤖 GitHub Actions CI/CD
+##🤖 GitHub Actions CI/CD
 1. Bootstrap Backend
   - Workflow: .github/workflows/bootstrap-backend.yml
   - Purpose: Sets up Azure backend for Terraform state
@@ -129,7 +129,7 @@ Features:
 
 - PostgreSQL seeding + verification
 
-🧰 Tech Stack
+##🧰 Tech Stack
 Layer	          Tech
 IaC	            Terraform
 CI/CD	          GitHub Actions
@@ -141,7 +141,7 @@ Secrets	        GitHub Secrets, AWS SSM Parameter Store
 Auth	          OIDC for AWS & Azure login
 Infra	          AWS (EC2, S3, CloudFront, IAM, VPC), Azure (Terraform state backend)
 
-📬 Contributions
+##📬 Contributions
 Pull requests and suggestions are welcome! If you'd like to add support for automatic PR-based deploy previews, CI testing, or multi-region deployment — open an issue or PR.
 
 
