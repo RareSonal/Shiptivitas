@@ -22,23 +22,22 @@ Shiptivitas automates everything from infrastructure provisioning to application
                                                   ┌──────────────────────┼────────────────────────┐
                                                   │                      │                        │
                                                   ▼                      ▼                        ▼
-                                          ┌─────────────────┐ ┌────────────────────┐ ┌────────────────────┐
-                                          │ Azure Backend   │ │  AWS Infrastructure│ │  GitHub Container  │
-                                          │(Terraform state)│ │ (Terraform-managed)│ │ Registry (GHCR)    │
-                                          └─────────────────┘ └────────────────────┘ └────────────────────┘
+                                          ┌─────────────────┐   ┌─────────────────────┐  ┌────────────────────┐
+                                          │ Azure Backend   │   │  AWS Infrastructure │  │  GitHub Container  │
+                                          │(Terraform state)│   │ (Terraform-managed) │  │ Registry (GHCR)    │
+                                          └─────────────────┘   └────────┬────────────┘  └────────────────────┘
                                                                          │
                                                                          ▼
-                                                             ┌──────────────────────┐
-                                                             │ EC2 + Docker Host    │
-                                                             │ - PostgreSQL (pgdb)  │
-                                                             │ - Backend Service    │   
-                                                             └──────────────────────┘
+                                                                ┌─────────────────────┐    ┌─────────────────┐
+                                                                │  EC2 + Docker Host  │───→│  Postgres RDS   │
+                                                                │   Backend (NodeJS)  │←───│ Database (SQL)  │
+                                                                └────────┬────────────┘    └─────────────────┘
                                                                          │
                                                                          ▼
-                                                               ┌───────────────────┐
-                                                               │ Frontend (React)  │
-                                                               │ S3 + CloudFront   │
-                                                               └───────────────────┘
+                                                                 ┌───────────────────┐
+                                                                 │  S3 + CloudFront  │
+                                                                 │  Frontend (React) │
+                                                                 └───────────────────┘
 
 
 
