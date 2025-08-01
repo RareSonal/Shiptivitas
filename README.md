@@ -30,7 +30,7 @@ Shiptivitas automates everything from infrastructure provisioning to application
                                                    ▼
                                           ┌─────────────────────┐    ┌─────────────────┐
                                           │  EC2 + Docker Host  │───→│  Postgres RDS   │
-                                          │   Backend (NodeJS)  │←───│ Database (SQL)  │
+                                          │  Backend (Express)  │←───│ Database (SQL)  │
                                           └────────┬────────────┘    └─────────────────┘
                                                    │
                                                    ▼
