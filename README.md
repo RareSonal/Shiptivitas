@@ -1,4 +1,4 @@
-# 🚀 Shiptivitas
+# Shiptivitas – Containerized Kanban System built on AWS
 
 A modern cloud-native project that bootstraps, deploys, and manages infrastructure and applications across Azure and AWS using Terraform and GitHub Actions CI/CD. 
 Shiptivitas features a full-stack web app with a PostgreSQL database, Dockerized backend, S3-hosted frontend, and automated infrastructure provisioning.
