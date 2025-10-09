@@ -10,8 +10,13 @@ export default class Board extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      cards: this.props.clients || { backlog: [], inProgress: [], complete: [] },
+      cards: {
+        backlog: [],
+        inProgress: [],
+        complete: [],
+      },
     };
+
     this.swimlanes = {
       backlog: React.createRef(),
       inProgress: React.createRef(),
@@ -20,6 +25,8 @@ export default class Board extends Component {
   }
 
   componentDidMount() {
+    this.fetchCards(); // 🆕 Fetch cards on mount
+
     this.drake = dragula([
       this.swimlanes.backlog.current,
       this.swimlanes.inProgress.current,
@@ -37,15 +44,26 @@ export default class Board extends Component {
     }
   }
 
+  async fetchCards() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/cards`);
+      const cards = await response.json();
+      this.setState({ cards: this.updateCardsState(cards) });
+    } catch (error) {
+      console.error('Error fetching cards:', error);
+    }
+  }
+
   async updateCardStatus(el, target, sibling) {
     const cardId = el.dataset.id;
     const targetStatus = target.dataset.status;
 
     const allCards = [
-      ...(this.state.cards.backlog || []),
-      ...(this.state.cards.inProgress || []),
-      ...(this.state.cards.complete || []),
+      ...this.state.cards.backlog,
+      ...this.state.cards.inProgress,
+      ...this.state.cards.complete,
     ];
+
     const card = allCards.find(c => c.id.toString() === cardId);
     if (!card) return;
 
@@ -87,18 +105,22 @@ export default class Board extends Component {
     }
   }
 
-  updateCardsState(updatedCards) {
+  updateCardsState(cards) {
     const newCards = {
       backlog: [],
       inProgress: [],
       complete: [],
     };
 
-    updatedCards.forEach(card => {
-      if (['backlog', 'in-progress', 'complete'].includes(card.status)) {
-        newCards[card.status].push(card);
+    cards.forEach(card => {
+      if (card.status === 'backlog') {
+        newCards.backlog.push(card);
+      } else if (card.status === 'in-progress') {
+        newCards.inProgress.push(card);
+      } else if (card.status === 'complete') {
+        newCards.complete.push(card);
       } else {
-        console.warn(`Unexpected status: ${card.status}, skipping card.`);
+        console.warn(`Unknown status: ${card.status}`);
       }
     });
 
@@ -129,7 +151,7 @@ export default class Board extends Component {
   }
 
   render() {
-    const { backlog = [], inProgress = [], complete = [] } = this.state.cards;
+    const { backlog, inProgress, complete } = this.state.cards;
 
     return (
       <div className="Board container-fluid">
