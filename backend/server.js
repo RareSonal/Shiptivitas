@@ -29,10 +29,20 @@ pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL (RDS)'))
   .catch(err => console.error('❌ PostgreSQL connection failed:', err));
 
-// Get all cards
+// Get all cards, ordered by status and priority
 app.get('/api/cards', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM card');
+    const result = await pool.query(
+      `SELECT * FROM card
+       ORDER BY 
+         CASE 
+           WHEN status = 'backlog' THEN 1
+           WHEN status = 'in-progress' THEN 2
+           WHEN status = 'complete' THEN 3
+           ELSE 4
+         END,
+         priority ASC`
+    );
     res.status(200).json(result.rows);
   } catch (err) {
     console.error('Error fetching cards:', err);
@@ -40,7 +50,7 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-// Update card status and priority
+// Update card status and priority with priority shifting
 app.put('/api/v1/cards/:cardId', async (req, res) => {
   const { cardId } = req.params;
   const { newStatus, newPriority, oldStatus, oldPriority } = req.body;
@@ -55,7 +65,58 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Update the card
+    // 1. Shift priorities in old status swimlane if status changed or priority changed
+    if (oldStatus === newStatus) {
+      // Same swimlane: Adjust priorities accordingly
+
+      if (newPriority < oldPriority) {
+        // Moved up in priority - increment priority of cards between newPriority and oldPriority -1
+        await client.query(
+          `UPDATE card
+           SET priority = priority + 1
+           WHERE status = $1
+             AND priority >= $2
+             AND priority < $3
+             AND id <> $4`,
+          [newStatus, newPriority, oldPriority, cardId]
+        );
+      } else if (newPriority > oldPriority) {
+        // Moved down in priority - decrement priority of cards between oldPriority +1 and newPriority
+        await client.query(
+          `UPDATE card
+           SET priority = priority - 1
+           WHERE status = $1
+             AND priority <= $2
+             AND priority > $3
+             AND id <> $4`,
+          [newStatus, newPriority, oldPriority, cardId]
+        );
+      }
+      // else same priority, no change needed
+
+    } else {
+      // Status changed: decrement old swimlane cards with priority > oldPriority
+      await client.query(
+        `UPDATE card
+         SET priority = priority - 1
+         WHERE status = $1
+           AND priority > $2
+           AND id <> $3`,
+        [oldStatus, oldPriority, cardId]
+      );
+
+      // Increment new swimlane cards with priority >= newPriority
+      await client.query(
+        `UPDATE card
+         SET priority = priority + 1
+         WHERE status = $1
+           AND priority >= $2
+           AND id <> $3`,
+        [newStatus, newPriority, cardId]
+      );
+    }
+
+    // 2. Update the card with new status and priority
     await client.query(
       `UPDATE card
        SET status = $1, priority = $2
@@ -63,7 +124,7 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       [newStatus, newPriority, cardId]
     );
 
-    // Log the change
+    // 3. Log the change
     await client.query(
       `INSERT INTO card_change_history 
        (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
@@ -71,16 +132,28 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       [cardId, oldStatus, newStatus, oldPriority, newPriority, timestamp]
     );
 
-    const result = await client.query('SELECT * FROM card');
+    // 4. Return all cards ordered by status and priority
+    const result = await client.query(
+      `SELECT * FROM card
+       ORDER BY 
+         CASE 
+           WHEN status = 'backlog' THEN 1
+           WHEN status = 'in-progress' THEN 2
+           WHEN status = 'complete' THEN 3
+           ELSE 4
+         END,
+         priority ASC`
+    );
+
     await client.query('COMMIT');
 
     res.status(200).json(result.rows);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Error updating card:', err); // full error
+    console.error('❌ Error updating card:', err);
     res.status(500).json({
       error: 'Failed to update card',
-      details: err.message, // include error message in response
+      details: err.message,
     });
   } finally {
     client.release();
