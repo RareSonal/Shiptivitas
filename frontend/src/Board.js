@@ -12,13 +12,13 @@ export default class Board extends Component {
     this.state = {
       cards: {
         backlog: [],
-        inProgress: [],
+        'in-progress': [],
         complete: [],
       },
     };
     this.swimlanes = {
       backlog: React.createRef(),
-      inProgress: React.createRef(),
+      'in-progress': React.createRef(),
       complete: React.createRef(),
     };
   }
@@ -28,7 +28,7 @@ export default class Board extends Component {
 
     this.drake = dragula([
       this.swimlanes.backlog.current,
-      this.swimlanes.inProgress.current,
+      this.swimlanes['in-progress'].current,
       this.swimlanes.complete.current,
     ]);
 
@@ -64,7 +64,7 @@ export default class Board extends Component {
 
     const allCards = [
       ...(this.state.cards.backlog || []),
-      ...(this.state.cards.inProgress || []),
+      ...(this.state.cards['in-progress'] || []),
       ...(this.state.cards.complete || []),
     ];
 
@@ -101,7 +101,7 @@ export default class Board extends Component {
         return;
       }
 
-      // Instead of using response data, fetch fresh cards from backend:
+      // Fetch fresh cards after update
       await this.fetchCards();
 
     } catch (error) {
@@ -112,7 +112,7 @@ export default class Board extends Component {
   updateCardsState(updatedCards) {
     const newCards = {
       backlog: [],
-      inProgress: [],
+      'in-progress': [],
       complete: [],
     };
 
@@ -120,7 +120,7 @@ export default class Board extends Component {
       if (card.status === 'backlog') {
         newCards.backlog.push(card);
       } else if (card.status === 'in-progress') {
-        newCards.inProgress.push(card);
+        newCards['in-progress'].push(card);
       } else if (card.status === 'complete') {
         newCards.complete.push(card);
       } else {
@@ -155,7 +155,7 @@ export default class Board extends Component {
   }
 
   render() {
-    const { backlog, inProgress, complete } = this.state.cards;
+    const { backlog = [], 'in-progress': inProgress = [], complete = [] } = this.state.cards;
 
     return (
       <div className="Board container-fluid">
@@ -164,7 +164,7 @@ export default class Board extends Component {
             {this.renderSwimlane('Backlog', 'backlog', backlog, this.swimlanes.backlog)}
           </div>
           <div className="col-md-4">
-            {this.renderSwimlane('In Progress', 'in-progress', inProgress, this.swimlanes.inProgress)}
+            {this.renderSwimlane('In Progress', 'in-progress', inProgress, this.swimlanes['in-progress'])}
           </div>
           <div className="col-md-4">
             {this.renderSwimlane('Complete', 'complete', complete, this.swimlanes.complete)}
