@@ -16,7 +16,6 @@ export default class Board extends Component {
         complete: [],
       },
     };
-
     this.swimlanes = {
       backlog: React.createRef(),
       inProgress: React.createRef(),
@@ -25,7 +24,7 @@ export default class Board extends Component {
   }
 
   componentDidMount() {
-    this.fetchCards(); // 🆕 Fetch cards on mount
+    this.fetchCards();
 
     this.drake = dragula([
       this.swimlanes.backlog.current,
@@ -47,8 +46,13 @@ export default class Board extends Component {
   async fetchCards() {
     try {
       const response = await fetch(`${apiBaseUrl}/api/cards`);
+      if (!response.ok) {
+        console.error('Failed to fetch cards');
+        return;
+      }
       const cards = await response.json();
-      this.setState({ cards: this.updateCardsState(cards) });
+      const newCards = this.updateCardsState(cards);
+      this.setState({ cards: newCards });
     } catch (error) {
       console.error('Error fetching cards:', error);
     }
@@ -59,9 +63,9 @@ export default class Board extends Component {
     const targetStatus = target.dataset.status;
 
     const allCards = [
-      ...this.state.cards.backlog,
-      ...this.state.cards.inProgress,
-      ...this.state.cards.complete,
+      ...(this.state.cards.backlog || []),
+      ...(this.state.cards.inProgress || []),
+      ...(this.state.cards.complete || []),
     ];
 
     const card = allCards.find(c => c.id.toString() === cardId);
@@ -97,22 +101,22 @@ export default class Board extends Component {
         return;
       }
 
-      const updatedCards = await response.json();
-      this.setState({ cards: this.updateCardsState(updatedCards) });
+      // Instead of using response data, fetch fresh cards from backend:
+      await this.fetchCards();
 
     } catch (error) {
       console.error('Error updating card:', error);
     }
   }
 
-  updateCardsState(cards) {
+  updateCardsState(updatedCards) {
     const newCards = {
       backlog: [],
       inProgress: [],
       complete: [],
     };
 
-    cards.forEach(card => {
+    updatedCards.forEach(card => {
       if (card.status === 'backlog') {
         newCards.backlog.push(card);
       } else if (card.status === 'in-progress') {
@@ -120,7 +124,7 @@ export default class Board extends Component {
       } else if (card.status === 'complete') {
         newCards.complete.push(card);
       } else {
-        console.warn(`Unknown status: ${card.status}`);
+        console.warn(`Unexpected status: ${card.status}, skipping card.`);
       }
     });
 
