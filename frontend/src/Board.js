@@ -1,8 +1,8 @@
 import React, { Component } from 'react';
 import 'dragula/dist/dragula.css';
+import dragula from 'dragula';
 import Swimlane from './Swimlane';
 import './Board.css';
-import dragula from 'dragula';
 
 const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
 
@@ -16,6 +16,7 @@ export default class Board extends Component {
         complete: [],
       },
     };
+
     this.swimlanes = {
       backlog: React.createRef(),
       'in-progress': React.createRef(),
@@ -26,6 +27,7 @@ export default class Board extends Component {
   componentDidMount() {
     this.fetchCards();
 
+    // Initialize dragula on the swimlane columns
     this.drake = dragula([
       this.swimlanes.backlog.current,
       this.swimlanes['in-progress'].current,
@@ -43,6 +45,7 @@ export default class Board extends Component {
     }
   }
 
+  // Fetch cards from API and organize them into swimlanes
   async fetchCards() {
     try {
       const response = await fetch(`${apiBaseUrl}/api/cards`);
@@ -51,21 +54,22 @@ export default class Board extends Component {
         return;
       }
       const cards = await response.json();
-      const newCards = this.updateCardsState(cards);
-      this.setState({ cards: newCards });
+      const organizedCards = this.updateCardsState(cards);
+      this.setState({ cards: organizedCards });
     } catch (error) {
       console.error('Error fetching cards:', error);
     }
   }
 
+  // Update card status and priority after dragging
   async updateCardStatus(el, target, sibling) {
     const cardId = el.dataset.id;
     const targetStatus = target.dataset.status;
 
     const allCards = [
-      ...(this.state.cards.backlog || []),
-      ...(this.state.cards['in-progress'] || []),
-      ...(this.state.cards.complete || []),
+      ...this.state.cards.backlog,
+      ...this.state.cards['in-progress'],
+      ...this.state.cards.complete,
     ];
 
     const card = allCards.find(c => c.id.toString() === cardId);
@@ -75,11 +79,11 @@ export default class Board extends Component {
     const oldPriority = card.priority;
 
     const siblingId = sibling ? sibling.dataset.id : null;
+
     const targetCards = allCards
-      .filter(c => c.status === targetStatus && c.id !== card.id)
+      .filter(c => c.status === targetStatus && c.id.toString() !== cardId)
       .sort((a, b) => a.priority - b.priority);
 
-    // Fix: handle case when siblingId not found or null
     const siblingIndex = siblingId
       ? targetCards.findIndex(c => c.id.toString() === siblingId)
       : -1;
@@ -101,65 +105,68 @@ export default class Board extends Component {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Failed to update card status:', errorText);
+        console.error('Failed to update card:', errorText);
         return;
       }
 
-      // Fetch fresh cards after update
-      await this.fetchCards();
+      const updatedCards = await response.json();
+      const updatedState = this.updateCardsState(updatedCards);
+      this.setState({ cards: updatedState });
 
     } catch (error) {
       console.error('Error updating card:', error);
     }
   }
 
-  updateCardsState(updatedCards) {
-    const newCards = {
+  // Reorganize cards into columns
+  updateCardsState(cards) {
+    const organized = {
       backlog: [],
       'in-progress': [],
       complete: [],
     };
 
-    updatedCards.forEach(card => {
-      if (card.status === 'backlog') {
-        newCards.backlog.push(card);
-      } else if (card.status === 'in-progress') {
-        newCards['in-progress'].push(card);
-      } else if (card.status === 'complete') {
-        newCards.complete.push(card);
+    cards.forEach(card => {
+      if (organized[card.status]) {
+        organized[card.status].push(card);
       } else {
-        console.warn(`Unexpected status: ${card.status}, skipping card.`);
+        console.warn(`Unexpected status "${card.status}", skipping card.`);
       }
     });
 
-    return newCards;
+    return organized;
   }
 
+  // Visual styling based on card status
   getCardStyle(status) {
     switch (status) {
-      case 'backlog': return { backgroundColor: 'grey' };
-      case 'in-progress': return { backgroundColor: 'blue' };
-      case 'complete': return { backgroundColor: 'green' };
-      default: return {};
+      case 'backlog':
+        return { backgroundColor: 'grey' };
+      case 'in-progress':
+        return { backgroundColor: 'blue' };
+      case 'complete':
+        return { backgroundColor: 'green' };
+      default:
+        return {};
     }
   }
 
-  renderSwimlane(name, status, cards, ref) {
+  renderSwimlane(title, statusKey, cards, laneRef) {
     return (
       <Swimlane
-        name={name}
-        status={status}
-        clients={cards.map(c => ({
-          ...c,
-          style: this.getCardStyle(c.status),
+        name={title}
+        status={statusKey}
+        clients={cards.map(card => ({
+          ...card,
+          style: this.getCardStyle(card.status),
         }))}
-        dragulaRef={ref}
+        dragulaRef={laneRef}
       />
     );
   }
 
   render() {
-    const { backlog = [], 'in-progress': inProgress = [], complete = [] } = this.state.cards;
+    const { backlog, 'in-progress': inProgress, complete } = this.state.cards;
 
     return (
       <div className="Board container-fluid">
