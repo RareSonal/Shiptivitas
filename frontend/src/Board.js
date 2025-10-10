@@ -79,9 +79,12 @@ export default class Board extends Component {
       .filter(c => c.status === targetStatus && c.id !== card.id)
       .sort((a, b) => a.priority - b.priority);
 
-    const newPriority = siblingId
+    // Fix: handle case when siblingId not found or null
+    const siblingIndex = siblingId
       ? targetCards.findIndex(c => c.id.toString() === siblingId)
-      : targetCards.length;
+      : -1;
+
+    const newPriority = siblingIndex === -1 ? targetCards.length : siblingIndex;
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/v1/cards/${card.id}`, {
@@ -97,7 +100,8 @@ export default class Board extends Component {
       });
 
       if (!response.ok) {
-        console.error('Failed to update card status');
+        const errorText = await response.text();
+        console.error('Failed to update card status:', errorText);
         return;
       }
 
