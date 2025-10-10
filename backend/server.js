@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
@@ -55,8 +54,15 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
   const { cardId } = req.params;
   const { newStatus, newPriority, oldStatus, oldPriority } = req.body;
 
-  if (!newStatus || newPriority === undefined || !oldStatus || oldPriority === undefined) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  const validStatuses = ['backlog', 'in-progress', 'complete'];
+
+  if (
+    !newStatus || !validStatuses.includes(newStatus) ||
+    newPriority === undefined || typeof newPriority !== 'number' || newPriority < 0 ||
+    !oldStatus || !validStatuses.includes(oldStatus) ||
+    oldPriority === undefined || typeof oldPriority !== 'number' || oldPriority < 0
+  ) {
+    return res.status(400).json({ error: 'Invalid or missing required fields' });
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -65,12 +71,8 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // 1. Shift priorities in old status swimlane if status changed or priority changed
     if (oldStatus === newStatus) {
-      // Same swimlane: Adjust priorities accordingly
-
       if (newPriority < oldPriority) {
-        // Moved up in priority - increment priority of cards between newPriority and oldPriority -1
         await client.query(
           `UPDATE card
            SET priority = priority + 1
@@ -81,7 +83,6 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
           [newStatus, newPriority, oldPriority, cardId]
         );
       } else if (newPriority > oldPriority) {
-        // Moved down in priority - decrement priority of cards between oldPriority +1 and newPriority
         await client.query(
           `UPDATE card
            SET priority = priority - 1
@@ -92,10 +93,8 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
           [newStatus, newPriority, oldPriority, cardId]
         );
       }
-      // else same priority, no change needed
-
     } else {
-      // Status changed: decrement old swimlane cards with priority > oldPriority
+      // Status changed
       await client.query(
         `UPDATE card
          SET priority = priority - 1
@@ -105,7 +104,6 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
         [oldStatus, oldPriority, cardId]
       );
 
-      // Increment new swimlane cards with priority >= newPriority
       await client.query(
         `UPDATE card
          SET priority = priority + 1
@@ -116,7 +114,6 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       );
     }
 
-    // 2. Update the card with new status and priority
     await client.query(
       `UPDATE card
        SET status = $1, priority = $2
@@ -124,7 +121,6 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       [newStatus, newPriority, cardId]
     );
 
-    // 3. Log the change
     await client.query(
       `INSERT INTO card_change_history 
        (cardID, oldStatus, newStatus, oldPriority, newPriority, timestamp)
@@ -132,7 +128,6 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
       [cardId, oldStatus, newStatus, oldPriority, newPriority, timestamp]
     );
 
-    // 4. Return all cards ordered by status and priority
     const result = await client.query(
       `SELECT * FROM card
        ORDER BY 
@@ -146,11 +141,10 @@ app.put('/api/v1/cards/:cardId', async (req, res) => {
     );
 
     await client.query('COMMIT');
-
     res.status(200).json(result.rows);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Error updating card:', err);
+    console.error('❌ Error updating card:', err.stack || err);
     res.status(500).json({
       error: 'Failed to update card',
       details: err.message,
