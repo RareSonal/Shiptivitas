@@ -426,47 +426,25 @@ jobs:
             echo "🧪 DEBUG: DB_USER=$DB_USER"
             echo "🧪 DEBUG: DB_PASSWORD=$DB_PASSWORD"
             echo "🧪 DEBUG: DB_NAME=$DB_NAME"
-      
-            echo "🔍 Checking Docker containers and network..."
-            docker ps
-            docker network inspect pgnet || true
-            docker logs pgdb || true
-
-            echo "⏳ Waiting for PostgreSQL to become ready..."
-            until docker run --rm \
-              --network pgnet \
-              -e PGPASSWORD="$DB_PASSWORD" \
-              postgres:14 \
-              pg_isready -h "$DB_HOST" -U "$DB_USER"; do
-              echo "⏳ Still waiting for PostgreSQL at $DB_HOST..."
-              sleep 2
-            done
-
-            echo "✅ PostgreSQL is ready. Checking if DB '$DB_NAME' exists..."
-
-            DB_EXISTS=$(docker run --rm \
+            echo "🧪 Checking if DB '$DB_NAME' exists..."
+            docker run --rm \
               --network pgnet \
               -e PGPASSWORD="$DB_PASSWORD" \
               postgres:14 \
               psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
-              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
-
-            if [ "$DB_EXISTS" != "1" ]; then
-              echo "📦 Database '$DB_NAME' does not exist. Creating..."
+              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" \
+              | grep -q 1 || \
               docker run --rm \
                 --network pgnet \
                 -e PGPASSWORD="$DB_PASSWORD" \
                 postgres:14 \
                 psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
                 -c "CREATE DATABASE \"$DB_NAME\";"
-              echo "✅ Database '$DB_NAME' created."
-            else
-              echo "✅ Database '$DB_NAME' already exists. No action needed."
-            fi
+              echo "✅ Ensured DB '$DB_NAME' exists."
         env:
-            DB_USER: ${{ env.DB_USER }}
-            DB_PASSWORD: ${{ env.DB_PASSWORD }}
-            DB_NAME: ${{ env.DB_NAME }}
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
 
       - name: 🕵️ Inspect image for seed_db.js and .sql
         uses: appleboy/ssh-action@v0.1.7
