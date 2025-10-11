@@ -1,6 +1,7 @@
 # -----------------------------------------
 # 🚀 Deploy Shiptivitas Infrastructure
 # -----------------------------------------
+
 name: Deploy Shiptivitas Infrastructure
 
 on:
@@ -243,7 +244,6 @@ jobs:
           npm ci
           echo "🛠️ Building frontend..."
           REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }} npm run build
-
           
       - name: 📂 List build directory
         working-directory: frontend
@@ -253,6 +253,7 @@ jobs:
         working-directory: frontend
         run: |
           aws s3 sync build s3://shiptivitas-frontend-bucket/ --delete
+          
       # -------------------------------------------------------
       # Backend Docker build, deploy, DB download & seed/verify
       # -------------------------------------------------------
@@ -273,6 +274,7 @@ jobs:
             echo "CHANGED=true" >> $GITHUB_ENV
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
+          
       - name: 🔧 Set lowercase repo owner
         id: vars
         run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
@@ -337,6 +339,7 @@ jobs:
           echo "✅ EC2 IP = $EC2_IP"
           echo "EC2_IP=$EC2_IP" >> "$GITHUB_ENV"
           echo "ip=$EC2_IP" >> "$GITHUB_OUTPUT"
+          
       ######################################################
       # Fetch DB credentials from SSM
       ######################################################
@@ -360,6 +363,7 @@ jobs:
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+          
       - name: ♻️ Export DB envs as outputs
         id: export_envs
         run: |
@@ -369,6 +373,7 @@ jobs:
           echo "db_user=${{ env.DB_USER }}" >> $GITHUB_OUTPUT
           echo "db_password=${{ env.DB_PASSWORD }}" >> $GITHUB_OUTPUT
           echo "db_name=${{ env.DB_NAME }}" >> $GITHUB_OUTPUT
+          
       ######################################################
       # Launch PostgreSQL on EC2 via SSH
       ######################################################
@@ -421,25 +426,47 @@ jobs:
             echo "🧪 DEBUG: DB_USER=$DB_USER"
             echo "🧪 DEBUG: DB_PASSWORD=$DB_PASSWORD"
             echo "🧪 DEBUG: DB_NAME=$DB_NAME"
-            echo "🧪 Checking if DB '$DB_NAME' exists..."
-            docker run --rm \
+      
+            echo "🔍 Checking Docker containers and network..."
+            docker ps
+            docker network inspect pgnet || true
+            docker logs pgdb || true
+
+            echo "⏳ Waiting for PostgreSQL to become ready..."
+            until docker run --rm \
+              --network pgnet \
+              -e PGPASSWORD="$DB_PASSWORD" \
+              postgres:14 \
+              pg_isready -h "$DB_HOST" -U "$DB_USER"; do
+              echo "⏳ Still waiting for PostgreSQL at $DB_HOST..."
+              sleep 2
+            done
+
+            echo "✅ PostgreSQL is ready. Checking if DB '$DB_NAME' exists..."
+
+            DB_EXISTS=$(docker run --rm \
               --network pgnet \
               -e PGPASSWORD="$DB_PASSWORD" \
               postgres:14 \
               psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
-              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" \
-              | grep -q 1 || \
+              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
+
+            if [ "$DB_EXISTS" != "1" ]; then
+              echo "📦 Database '$DB_NAME' does not exist. Creating..."
               docker run --rm \
                 --network pgnet \
                 -e PGPASSWORD="$DB_PASSWORD" \
                 postgres:14 \
                 psql -h "$DB_HOST" -U "$DB_USER" -d postgres \
                 -c "CREATE DATABASE \"$DB_NAME\";"
-              echo "✅ Ensured DB '$DB_NAME' exists."
+              echo "✅ Database '$DB_NAME' created."
+            else
+              echo "✅ Database '$DB_NAME' already exists. No action needed."
+            fi
         env:
-          DB_USER: ${{ env.DB_USER }}
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
-          DB_NAME: ${{ env.DB_NAME }}
+            DB_USER: ${{ env.DB_USER }}
+            DB_PASSWORD: ${{ env.DB_PASSWORD }}
+            DB_NAME: ${{ env.DB_NAME }}
 
       - name: 🕵️ Inspect image for seed_db.js and .sql
         uses: appleboy/ssh-action@v0.1.7
@@ -454,6 +481,7 @@ jobs:
             echo "🔍 Checking for seed_db.js and .sql file..."
             docker run --rm ghcr.io/${{ steps.vars.outputs.owner_lc }}/shiptivitas-backend:latest \
             sh -c "ls -lah /usr/src/app/seed_db.js && ls -lah /usr/src/app/shiptivitas_postgres.sql"
+            
       - name: 🛠️ Seed PostgreSQL DB via Docker
         uses: appleboy/ssh-action@v0.1.7
         with:
